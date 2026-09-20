@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>local.nvim.system-waveform</string>
+<key>CFBundleName</key><string>Neovim Audio Waveform</string>
+<key>CFBundleExecutable</key><string>system-waveform</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>NSAudioCaptureUsageDescription</key><string>Display a live waveform of system playback in Neovim. Audio is processed in memory and is not recorded.</string>
+</dict></plist>
