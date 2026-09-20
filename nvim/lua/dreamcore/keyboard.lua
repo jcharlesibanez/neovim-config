@@ -45,20 +45,16 @@ function M.resolve(key)
 end
 
 function M.layout(width)
-  local positions, rows = {}, 7
-  if width >= 42 then
-    local left = math.floor((width - 41) / 2)
-    for _, key in ipairs(M.keys) do
-      positions[#positions + 1] = { name = key.name, row = key.row, col = left + math.floor(key.col * 3), size = 2 }
-    end
-  else
-    local columns = math.max(1, math.floor(width / 3))
-    rows = math.ceil(#M.keys / columns)
-    for i, key in ipairs(M.keys) do
-      positions[#positions + 1] = { name = key.name, row = math.floor((i - 1) / columns), col = ((i - 1) % columns) * 3, size = math.min(2, width) }
-    end
+  -- The keyboard is one quiet horizontal strip directly above the waveform.
+  -- Every slot is one terminal cell wide so all 68 keys fit on one level.
+  local positions = {}
+  local gap = math.max(0, math.floor((width - #M.keys) / (#M.keys + 1)))
+  local step = 1 + gap
+  local left = math.max(0, math.floor((width - (#M.keys * step - gap)) / 2))
+  for index, key in ipairs(M.keys) do
+    positions[#positions + 1] = { name = key.name, row = 0, col = left + (index - 1) * step, size = 1 }
   end
-  return positions, rows
+  return positions, 1
 end
 
 function M.blank(width)
