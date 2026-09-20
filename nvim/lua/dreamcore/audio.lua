@@ -1,8 +1,10 @@
-local M = { enabled = false, paused = false, samples = {}, status = 'OFF', views = {} }
+local M = { enabled = false, paused = false, samples = {}, levels = {}, status = 'OFF', views = {} }
 local uv = vim.uv or vim.loop
 local root = vim.fn.stdpath('config') .. '/native/audio'
 local ns = vim.api.nvim_create_namespace('SystemAudioWaveform')
-local blocks = { ' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█' }
+-- One thin braille column, filled bottom-up in quarter-cell increments.
+-- This keeps fractional tips attached to the baseline instead of stacking pipes.
+local strokes = { ' ', '⡀', '⡄', '⡆', '⡇' }
 local last_frame = 0
 local stale_timer
 local stderr = ''
@@ -12,19 +14,44 @@ local exiting = false
 -- Positive half-wave rectification, never absolute-value/full-wave rectification.
 function M.rectify(value)
   if type(value) ~= 'number' or value ~= value then return 0 end
-  return math.min(1, math.max(0, value * (vim.g.system_audio_gain or 2.5)))
+  return math.min(1, math.max(0, value * (vim.g.system_audio_gain or 2.0)))
 end
 
-function M.lines(samples, width, height)
+-- Follow positive peaks promptly while allowing a short, smooth release.
+-- Rectify before averaging: negative samples never become positive energy.
+function M.smooth(samples, dt)
+  local levels, bins = {}, 64
+  dt = math.max(.005, math.min(.2, dt or .04))
+  for bin = 1, bins do
+    local first = math.floor((bin - 1) * #samples / bins) + 1
+    local last = math.min(#samples, math.max(first, math.floor(bin * #samples / bins)))
+    local peak = 0
+    for i = first, last do
+      local value = M.rectify(samples[i])
+      peak = math.max(peak, value)
+    end
+    local target = peak
+    local previous = M.levels[bin] or 0
+    local tau = target > previous and .08 or .28
+    local value = previous + (target - previous) * (1 - math.exp(-dt / tau))
+    levels[bin] = value < .004 and target == 0 and 0 or value
+  end
+  M.levels = levels
+end
+
+function M.lines(levels, width, height)
   local rows = {}
+  local bars = math.max(1, math.floor(width / 3))
+  local offset = math.floor((width - (bars * 3 - 2)) / 2)
   for row = 1, height do
     local cells = {}
-    for col = 1, width do
-      -- Nearest-sample resampling retains the zero intervals of negative cycles.
-      local index = math.min(#samples, math.floor((col - 1) * #samples / width) + 1)
-      local level = math.floor(M.rectify(samples[index]) * height * 8 + .5)
-      local fill = math.max(0, math.min(8, level - (height - row) * 8))
-      cells[col] = fill == 0 and row == height and '─' or blocks[fill + 1]
+    for col = 1, width do cells[col] = ' ' end
+    for bar = 1, bars do
+      local index = math.min(#levels, math.floor((bar - 1) * #levels / bars) + 1)
+      local value = math.max(0, math.min(1, levels[index] or 0))
+      local level = value > .025 and math.floor(value * height * 4 + .5) or 0
+      local fill = math.max(0, math.min(4, level - (height - row) * 4))
+      cells[offset + (bar - 1) * 3 + 1] = fill > 0 and strokes[fill + 1] or row == height and '⡀' or ' '
     end
     rows[row] = table.concat(cells)
   end
@@ -32,7 +59,7 @@ function M.lines(samples, width, height)
 end
 
 local function highlight()
-  vim.api.nvim_set_hl(0, 'SystemAudioWave', { fg = '#57d9f5', bg = '#050607' })
+  vim.api.nvim_set_hl(0, 'SystemAudioWave', { fg = '#5299a8', bg = '#050607' })
   vim.api.nvim_set_hl(0, 'SystemAudioLabel', { fg = '#627580', bg = '#050607' })
 end
 
@@ -43,15 +70,20 @@ function M.render()
       M.views[tab] = nil
     else
       local width, height = vim.api.nvim_win_get_width(view.win), vim.api.nvim_win_get_height(view.win)
-      local lines = M.lines(M.samples, width, math.max(1, height - 1))
+      local keyboard = require('dreamcore.keyboard')
+      local lines = keyboard.blank(width)
+      local keyboard_height = #lines
+      local wave = M.lines(M.levels, width, math.max(1, height - keyboard_height - 1))
       local label = ' SYSTEM AUDIO · ' .. M.status
       if width > 75 then label = label .. '    SPACE U V  TOGGLE' end
-      table.insert(lines, 1, vim.fn.strcharpart(label, 0, width))
+      lines[#lines + 1] = vim.fn.strcharpart(label, 0, width)
+      vim.list_extend(lines, wave)
       vim.bo[view.buf].modifiable = true
       vim.api.nvim_buf_set_lines(view.buf, 0, -1, false, lines)
       vim.bo[view.buf].modifiable = false
       vim.api.nvim_buf_clear_namespace(view.buf, ns, 0, -1)
-      vim.api.nvim_buf_add_highlight(view.buf, ns, 'SystemAudioLabel', 0, 0, -1)
+      vim.api.nvim_buf_add_highlight(view.buf, ns, 'SystemAudioLabel', keyboard_height, 0, -1)
+      keyboard.draw(view.buf, width)
     end
   end
 end
@@ -60,12 +92,17 @@ local function ensure_view()
   if not M.enabled or #vim.api.nvim_list_uis() == 0 or vim.o.lines < 16 then return end
   local tab = vim.api.nvim_get_current_tabpage()
   local view = M.views[tab]
-  if view and vim.api.nvim_win_is_valid(view.win) then return end
+  local _, keyboard_height = require('dreamcore.keyboard').layout(vim.o.columns)
+  local desired_height = keyboard_height + 4
+  if view and vim.api.nvim_win_is_valid(view.win) then
+    vim.api.nvim_win_set_height(view.win, desired_height)
+    return
+  end
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].filetype = 'nofile', 'wipe', 'system_waveform'
   vim.bo[buf].swapfile = false
   local win = vim.api.nvim_open_win(buf, false, {
-    split = 'below', win = -1, height = 4, focusable = false, style = 'minimal', noautocmd = true,
+    split = 'below', win = -1, height = desired_height, focusable = false, style = 'minimal', noautocmd = true,
   })
   M.views[tab] = { win = win, buf = buf }
   vim.wo[win].winfixheight = true
@@ -79,6 +116,8 @@ end
 function M.consume(frame)
   if not M.enabled or M.paused or type(frame.samples) ~= 'table' then return end
   M.samples = frame.samples
+  local now = uv.now()
+  M.smooth(frame.samples, last_frame > 0 and (now - last_frame) / 1000 or .04)
   M.status = frame.status == 'live' and 'LIVE' or 'WAITING FOR AUDIO'
   last_frame = uv.now()
   M.render()
@@ -124,7 +163,7 @@ local function capture()
       if M.job ~= job then return end
       M.job = nil
       stop_job()
-      M.samples = {}
+      M.samples, M.levels = {}, {}
       M.status = code == 0 and 'STOPPED · :AudioStart' or 'CHECK AUDIO ACCESS · :AudioStart'
       M.render()
       if code ~= 0 then
@@ -139,7 +178,7 @@ local function capture()
     stale_timer = assert(uv.new_timer())
     stale_timer:start(500, 500, vim.schedule_wrap(function()
       if M.job and uv.now() - last_frame > 1000 then
-        M.samples = {}
+        M.samples, M.levels = {}, {}
         M.status = 'WAITING FOR AUDIO ACCESS'
         M.render()
       end
@@ -162,7 +201,7 @@ function M.stop()
   for _, view in pairs(M.views) do
     if vim.api.nvim_win_is_valid(view.win) then pcall(vim.api.nvim_win_close, view.win, true) end
   end
-  M.views, M.samples, M.status = {}, {}, 'OFF'
+  M.views, M.samples, M.levels, M.status = {}, {}, {}, 'OFF'
 end
 
 function M.pause(paused)
@@ -176,6 +215,7 @@ function M.toggle()
 end
 
 function M.setup()
+  require('dreamcore.keyboard').setup()
   highlight()
   local group = vim.api.nvim_create_augroup('SystemWaveform', { clear = true })
   vim.api.nvim_create_autocmd('ColorScheme', { group = group, callback = highlight })

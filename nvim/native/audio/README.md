@@ -5,11 +5,19 @@ playback. It does not use the microphone, change the output device, save audio,
 or send it over the network. PCM is reduced to 256 signed samples per frame and
 sent to Neovim through the child process's stdout pipe, about 25 times a second.
 
-The footer displays `max(0, sample * gain)`, capped at 1. Negative samples stay
-at zero: this is half-wave rectification, not absolute-value rectification.
-The default display gain is 2.5; set `vim.g.system_audio_gain` to change it.
-Silence produces a flat baseline. The footer reserves four rows rather than
-covering editable text. The helper destroys its private tap and aggregate device
+The footer draws thin vertical strokes, separated by two blank columns, in
+muted cyan. A single braille column gives each tip four bottom-up positions
+per character row, rather than growing in whole pipe-character steps. This
+is terminal-cell rendering, not a pixel graphics overlay. Samples are half-wave rectified with `max(0, sample * gain)`, capped
+at 1, before measuring positive peaks in 64 small groups. The envelope responds
+over 80 ms and settles over 280 ms to follow the music without hard jumps.
+Negative samples never become positive energy. The default display gain is 2.0;
+set `vim.g.system_audio_gain` to change it. Silence settles to a dotted baseline. The footer reserves four audio rows plus a seven-row invisible keyboard map
+rather than covering editable text. The keyboard map has 68 US/ANSI key slots
+(excluding power and standalone modifiers). Squares flash green only for keys
+Neovim receives and fade back to black after 350 ms. This uses `vim.on_key`,
+requires no keyboard-monitoring permission, and stores no keystroke history.
+OS-reserved media shortcuts that never reach Neovim cannot light a square. The helper destroys its private tap and aggregate device
 on exit, and also exits if its Neovim parent disappears.
 
 ## Controls
