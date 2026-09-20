@@ -14,7 +14,7 @@ local exiting = false
 -- Positive half-wave rectification, never absolute-value/full-wave rectification.
 function M.rectify(value)
   if type(value) ~= 'number' or value ~= value then return 0 end
-  return math.min(1, math.max(0, value * (vim.g.system_audio_gain or 2.0)))
+  return math.min(1, math.max(0, value * (vim.g.system_audio_gain or 2.5)))
 end
 
 -- Follow positive peaks promptly while allowing a short, smooth release.

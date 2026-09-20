@@ -11,7 +11,7 @@ per character row, rather than growing in whole pipe-character steps. This
 is terminal-cell rendering, not a pixel graphics overlay. Samples are half-wave rectified with `max(0, sample * gain)`, capped
 at 1, before measuring positive peaks in 64 small groups. The envelope responds
 over 80 ms and settles over 280 ms to follow the music without hard jumps.
-Negative samples never become positive energy. The default display gain is 2.0;
+Negative samples never become positive energy. The default display gain is 2.5;
 set `vim.g.system_audio_gain` to change it. Silence settles to a dotted baseline. The footer reserves four audio rows plus a seven-row invisible keyboard map
 rather than covering editable text. The keyboard map has 68 US/ANSI key slots
 (excluding power and standalone modifiers). Squares flash green only for keys
