@@ -28,6 +28,14 @@ function M.create(directory, name)
   return path, is_file
 end
 
+-- Open files in the editor window behind the explorer. Editing from the
+-- focused picker window would replace the directory panel itself.
+function M.open_file(picker, path)
+  local main = picker and picker.main
+  if main and vim.api.nvim_win_is_valid(main) then vim.api.nvim_set_current_win(main) end
+  vim.api.nvim_cmd({ cmd = 'edit', args = { path } }, {})
+end
+
 function M.prompt(picker)
   local directory = picker:dir()
   Snacks.input({ prompt = 'New: folder name or file.ext', default = '' }, function(name)
@@ -43,6 +51,7 @@ function M.prompt(picker)
     if not picker.closed then
       require('snacks.explorer.actions').update(picker, { target = path, refresh = true })
     end
+    if result then vim.schedule(function() M.open_file(picker, path) end) end
   end)
 end
 return M
