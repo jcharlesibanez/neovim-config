@@ -56,6 +56,7 @@ require("lazy").setup({
     -- Treesitter syntax highlighting.
     {
       "nvim-treesitter/nvim-treesitter",
+      branch = "master", -- Neovim 0.11-compatible API; main currently requires 0.12.
       build = ":TSUpdate",
       config = function()
         require("nvim-treesitter").setup({
