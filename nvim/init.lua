@@ -147,5 +147,6 @@ require("dreamcore.motion").setup()
 
 require("dreamcore.home").setup()
 require("dreamcore.workbench").setup()
+require("dreamcore.folds").setup()
 
 require("dreamcore.audio").setup()
