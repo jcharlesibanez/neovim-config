@@ -52,7 +52,10 @@ end
 
 function M.setup()
   vim.api.nvim_create_user_command('FoldClass', M.toggle_class, { desc = 'Toggle the class under the cursor' })
-  vim.keymap.set('n', '<leader>fc', M.toggle_class, { desc = 'Fold/unfold current class' })
+  vim.keymap.set({ 'n', 'i' }, '<F6>', function()
+    if vim.api.nvim_get_mode().mode:sub(1, 1) == 'i' then vim.cmd.stopinsert() end
+    M.toggle_class()
+  end, { desc = 'Fold/unfold current class' })
 end
 
 return M
