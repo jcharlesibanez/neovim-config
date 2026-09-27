@@ -1,4 +1,5 @@
 local M = {}
+local histories = {}
 
 -- Tree-sitter uses slightly different names for the same ideas in each
 -- language. These are complete structural blocks, rather than their bodies,
@@ -107,6 +108,20 @@ local function block_at_cursor()
   return whole_conditional_chain(node)
 end
 
+local function history_for_current_window()
+  local win = vim.api.nvim_get_current_win()
+  local buf = vim.api.nvim_get_current_buf()
+  histories[win] = histories[win] or {}
+
+  local tick = vim.api.nvim_buf_get_changedtick(buf)
+  local history = histories[win][buf]
+  if not history or history.tick ~= tick then
+    history = { tick = tick, entries = {} }
+    histories[win][buf] = history
+  end
+  return history
+end
+
 function M.toggle()
   local node = block_at_cursor()
   if not node then return false end
@@ -115,19 +130,59 @@ function M.toggle()
   local first, last = start_row + 1, end_row + 1
   if last <= first then return false end
 
+  local original_cursor = vim.api.nvim_win_get_cursor(0)
+  local history = history_for_current_window()
   vim.wo.foldmethod = 'manual'
   vim.wo.foldenable = true
   vim.api.nvim_win_set_cursor(0, { first, 0 })
 
   local previous_level = first > 1 and vim.fn.foldlevel(first - 1) or 0
+  local action
   if vim.fn.foldclosed(first) == first then
     vim.cmd('normal! zo')
+    action = 'opened'
   elseif vim.fn.foldlevel(first) > previous_level then
     vim.cmd('normal! zc')
+    action = 'closed'
   else
     vim.cmd(('%d,%dfold'):format(first, last))
+    action = 'created'
   end
+
+  table.insert(history.entries, {
+    action = action,
+    first = first,
+    cursor = original_cursor,
+  })
   return true
+end
+
+local function undo_one_fold()
+  local history = history_for_current_window()
+  local entry = table.remove(history.entries)
+  if not entry then return false end
+
+  local line_count = vim.api.nvim_buf_line_count(0)
+  vim.api.nvim_win_set_cursor(0, { math.min(entry.first, line_count), 0 })
+
+  if entry.action == 'created' then
+    vim.cmd('normal! zd')
+  elseif entry.action == 'closed' then
+    if vim.fn.foldclosed(entry.first) == entry.first then vim.cmd('normal! zo') end
+  elseif entry.action == 'opened' then
+    if vim.fn.foldclosed(entry.first) == -1 then vim.cmd('normal! zc') end
+  end
+
+  local cursor_line = math.min(entry.cursor[1], line_count)
+  local max_col = #(vim.api.nvim_buf_get_lines(0, cursor_line - 1, cursor_line, false)[1] or '')
+  pcall(vim.api.nvim_win_set_cursor, 0, { cursor_line, math.min(entry.cursor[2], max_col) })
+  return true
+end
+
+function M.undo()
+  local remaining = vim.v.count1
+  while remaining > 0 and undo_one_fold() do remaining = remaining - 1 end
+  if remaining > 0 then vim.cmd(('normal! %du'):format(remaining)) end
 end
 
 function M.setup()
@@ -135,6 +190,7 @@ function M.setup()
   -- Keep the old command working for muscle memory and external mappings.
   vim.api.nvim_create_user_command('FoldClass', M.toggle, { desc = 'Toggle the nearest code block' })
   vim.keymap.set('n', '\\', M.toggle, { desc = 'Fold/unfold nearest code block' })
+  vim.keymap.set('n', 'u', M.undo, { desc = 'Undo fold or text change' })
 end
 
 return M
