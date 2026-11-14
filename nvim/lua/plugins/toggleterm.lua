@@ -16,7 +16,6 @@ return {
         winblend = 0,
         title_pos = "center",
       },
-      highlights = { FloatBorder = { guifg = "#286071" }, NormalFloat = { guibg = "#0e1215" } },
     },
   },
 }

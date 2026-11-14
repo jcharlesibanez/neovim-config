@@ -1,8 +1,7 @@
 vim.g.mapleader = " "
 vim.g.maplocalleader = " "
 
--- A directory launch chooses the workspace; the home screen owns startup.
--- Consume it before explorer plugins can turn it into a directory browser.
+-- Consume a directory arg before explorer plugins turn it into a directory browser.
 if vim.fn.argc() == 1 and vim.fn.isdirectory(vim.fn.argv(0)) == 1 then
   local directory = vim.fn.fnamemodify(vim.fn.argv(0), ":p")
   vim.cmd.cd(vim.fn.fnameescape(directory))
@@ -28,10 +27,9 @@ vim.opt.scrolloff = 8
 vim.opt.sidescrolloff = 8
 vim.opt.splitright = true
 vim.opt.splitbelow = true
-vim.opt.showmode = false
-vim.opt.cmdheight = 0
+vim.opt.showmode = true
+vim.opt.cmdheight = 1
 vim.opt.laststatus = 3
-vim.opt.showtabline = 2
 vim.opt.pumheight = 12
 vim.opt.pumblend = 0
 vim.opt.winblend = 0
@@ -104,8 +102,7 @@ require("lazy").setup({
 
 vim.o.background = "dark"
 
--- The UI layer is provided by Snacks; these keymaps stay lazy and fast.
-vim.keymap.set('n', '<leader><space>', function() Snacks.picker.smart() end, { desc = "Dream Finder" })
+vim.keymap.set('n', '<leader><space>', function() Snacks.picker.smart() end, { desc = "Find" })
 vim.keymap.set('n', '<leader>ff', function() Snacks.picker.files() end, { desc = "Find Files" })
 vim.keymap.set('n', '<leader>fg', function() Snacks.picker.grep() end, { desc = "Search Text" })
 vim.keymap.set('n', '<leader>fb', function() Snacks.picker.buffers() end, { desc = "Open Buffers" })
@@ -115,13 +112,84 @@ vim.keymap.set('n', '<leader>w', '<cmd>w<CR>', { desc = "Save File" })
 vim.keymap.set('n', '<leader>ww', '<cmd>w!<CR>', { desc = "Save File" })
 vim.keymap.set('n', '<leader>o', function() Snacks.explorer.reveal() end, { desc = "Reveal Current File"})
 vim.keymap.set('n', '<leader>qq', '<cmd>exit<CR>', { desc = "Exit Neovim"})
-for i = 1, 9 do
-  vim.keymap.set("n", "<leader>" .. i, "<cmd>BufferLineGoToBuffer " .. i .. "<CR>")
-end
 vim.keymap.set("n", "<leader>Q", function() Snacks.bufdelete() end, { desc = "Close Buffer" })
 vim.keymap.set("n", "<leader>un", function() Snacks.notifier.show_history() end, { desc = "Notification History" })
 vim.keymap.set('n', '<leader>t', '<cmd>ToggleTerm<CR>')
 vim.keymap.set('t', '<leader>t', '<cmd>ToggleTerm<CR>')
+
+-- Claude Code agent panel  (off → active → minimized → active → …)
+local agent_term  = nil
+local agent_state = 'off'   -- 'off' | 'active' | 'minimized'
+local agent_win   = nil     -- indicator float window
+
+local function agent_hide_indicator()
+  if agent_win and vim.api.nvim_win_is_valid(agent_win) then
+    vim.api.nvim_win_close(agent_win, true)
+  end
+  agent_win = nil
+end
+
+local function agent_show_indicator()
+  agent_hide_indicator()
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { ' ◉ AGENT ON ' })
+  vim.bo[buf].bufhidden = 'wipe'
+  agent_win = vim.api.nvim_open_win(buf, false, {
+    relative  = 'editor',
+    anchor    = 'NE',
+    row       = 1,
+    col       = vim.o.columns - 1,
+    width     = 13,
+    height    = 1,
+    style     = 'minimal',
+    border    = 'single',
+    focusable = false,
+    zindex    = 200,
+  })
+  vim.api.nvim_set_option_value('winhl', 'NormalFloat:AgentIndicator,FloatBorder:AgentIndicatorBorder', { win = agent_win })
+end
+
+local function toggle_agent()
+  if agent_state == 'off' then
+    local w = function() return math.floor(vim.o.columns * 0.42) end
+    agent_term = require('toggleterm.terminal').Terminal:new({
+      cmd          = 'claude',
+      dir          = vim.fn.getcwd(),
+      direction    = 'float',
+      float_opts   = {
+        border   = 'single',
+        width    = w,
+        height   = function() return vim.o.lines - 3 end,
+        row      = 0,
+        col      = function() return vim.o.columns - w() - 2 end,
+        winblend = 0,
+      },
+      hidden       = true,
+      display_name = 'Claude Code',
+      on_exit = function()
+        agent_hide_indicator()
+        agent_term  = nil
+        agent_state = 'off'
+      end,
+      on_open = function(t)
+        vim.keymap.set('t', '<leader>-', toggle_agent, { buffer = t.bufnr })
+      end,
+    })
+    agent_term:open()
+    agent_state = 'active'
+  elseif agent_state == 'active' then
+    agent_term:toggle()        -- closes window, keeps process
+    agent_show_indicator()
+    agent_state = 'minimized'
+  else                         -- minimized
+    agent_hide_indicator()
+    agent_term:toggle()        -- reopens window
+    agent_state = 'active'
+  end
+end
+
+vim.keymap.set({ 'n', 't' }, '<leader>-', toggle_agent, { desc = 'Toggle Claude Code agent' })
+vim.keymap.set('n', '<leader>H', function() Snacks.picker.recent() end, { desc = "Recent files" })
 vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>', { desc = "Clear Search" })
 vim.opt.shiftwidth = 4   -- Number of spaces for each step of (auto)indent
 vim.opt.tabstop = 4      -- Number of spaces that a <Tab> in the file counts for
@@ -143,10 +211,5 @@ vim.api.nvim_create_autocmd("TextYankPost", {
 })
 
 require("dreamcore.webdev").setup()
-require("dreamcore.motion").setup()
-
-require("dreamcore.home").setup()
 require("dreamcore.workbench").setup()
 require("dreamcore.folds").setup()
-
-require("dreamcore.audio").setup()
