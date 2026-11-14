@@ -40,9 +40,18 @@ function M.run()
     terminal:open(); vim.notify('Your program is still running. Use Ctrl-C to stop it.'); return
   end
   if terminal then terminal:shutdown() end
+  local h = 12
   terminal = require('toggleterm.terminal').Terminal:new({
     cmd = cmd, dir = vim.fs.dirname(file), direction = 'float', hidden = true,
     close_on_exit = false, display_name = 'Run · ' .. vim.fs.basename(file),
+    float_opts = {
+      border  = 'single',
+      width   = function() return vim.o.columns - 4 end,
+      height  = h,
+      row     = function() return vim.o.lines - h - 3 end,
+      col     = 2,
+      winblend = 0,
+    },
     on_open = function(t)
       vim.keymap.set('t', '<Esc>', [[<C-\><C-n><cmd>close<CR>]], { buffer = t.bufnr, desc = 'Back to editor' })
     end,
@@ -59,72 +68,13 @@ function M.toggle_files()
   end
 end
 
-function M.home()
-  for _, picker in ipairs(Snacks.picker.get()) do picker:close() end
-  vim.cmd.stopinsert()
-  require('dreamcore.home').show()
-end
-
-function M.toolbar()
-  local clock = ' ' .. require('dreamcore.clock').text() .. ' '
-  local clock_width = vim.fn.strdisplaywidth(clock)
-  local start = math.max(0, math.floor((vim.o.columns - clock_width) / 2))
-  local available = math.max(0, vim.o.columns - start - clock_width)
-  local items = {
-    { 'Home', 'Home F1' }, { 'Files', 'Files F2' }, { 'Run', 'Run F5' },
-    { 'TabLeft', '← S-h' }, { 'TabRight', 'S-l →' }, { 'Save', 'Save ^S' },
-    { 'Motion', require('dreamcore.motion').enabled and '◉' or '○' }, { 'Quit', 'Quit' },
-  }
-  local function size()
-    local width = 0
-    for _, item in ipairs(items) do width = width + vim.fn.strdisplaywidth(item[2]) + 2 end
-    return width
-  end
-  if size() > available then
-    local medium = { TabLeft = '←', TabRight = '→', Save = 'S', Quit = 'Q' }
-    for _, item in ipairs(items) do item[2] = medium[item[1]] or item[2] end
-  end
-  if size() > available then
-    local short = { Home = 'F1', Files = 'F2', Run = 'F5' }
-    for _, item in ipairs(items) do item[2] = short[item[1]] or item[2] end
-  end
-  -- Keep the clock centered on small terminals; retain the primary shortcuts.
-  for _, name in ipairs({ 'Motion', 'Save', 'Quit', 'TabLeft', 'TabRight', 'Run', 'Files', 'Home' }) do
-    if size() <= available then break end
-    for index, item in ipairs(items) do
-      if item[1] == name then table.remove(items, index); break end
-    end
-  end
-  local result = {
-    { text = clock .. string.rep(' ', math.max(0, available - size())), fg = '#b8edfa', bg = '#050607' },
-  }
-  for _, item in ipairs(items) do
-    result[#result + 1] = { text = '%@v:lua.Dream' .. item[1] .. '@ ' .. item[2] .. ' %X', fg = item[1] == 'Run' and '#57d9f5' or '#8b9faa', bg = '#050607' }
-  end
-  return result
-end
-
 function M.setup()
-  require('dreamcore.clock').setup()
-  local actions = {
-    Motion = function() require('dreamcore.motion').toggle() end,
-    Run = M.run, Home = M.home, Files = M.toggle_files,
-    TabLeft = function() require('bufferline').cycle(-1) end,
-    TabRight = function() require('bufferline').cycle(1) end,
-    Save = function() vim.cmd.write() end, Quit = function() vim.cmd.confirm('qa') end,
-  }
-  for name, action in pairs(actions) do
-    _G['Dream' .. name] = function() vim.schedule(action) end
-    if name ~= 'Home' then vim.api.nvim_create_user_command(name, action, {}) end
-  end
-  for _, key in ipairs({ 'H', '<S-Left>' }) do vim.keymap.set('n', key, actions.TabLeft, { desc = 'Tab left' }) end
-  for _, key in ipairs({ 'L', '<S-Right>' }) do vim.keymap.set('n', key, actions.TabRight, { desc = 'Tab right' }) end
-  vim.keymap.set({ 'n', 'i', 't' }, '<F1>', M.home, { desc = 'Home' })
+  vim.api.nvim_create_user_command('Run', M.run, {})
   vim.keymap.set({ 'n', 'i', 't' }, '<F2>', M.toggle_files, { desc = 'Toggle files' })
   vim.keymap.set('n', '<leader>e', M.toggle_files, { desc = 'Toggle files' })
-  vim.keymap.set({ 'n', 'i' }, '<F5>', actions.Run, { desc = 'Run current file' })
-  for lower, upper in pairs({ run = 'Run', tableft = 'TabLeft', tabright = 'TabRight', home = 'Home' }) do
-    vim.cmd(string.format([[cnoreabbrev <expr> %s getcmdtype() == ':' && getcmdline() ==# '%s' ? '%s' : '%s']], lower, lower, upper, lower))
-  end
+  vim.keymap.set({ 'n', 'i' }, '<F5>', M.run, { desc = 'Run current file' })
+  vim.keymap.set('n', '<leader>r', M.run, { desc = 'Run current file' })
+  vim.cmd([[cnoreabbrev <expr> run getcmdtype() == ':' && getcmdline() ==# 'run' ? 'Run' : 'run']])
 end
+
 return M
