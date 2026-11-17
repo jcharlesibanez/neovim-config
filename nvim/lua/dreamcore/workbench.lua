@@ -68,8 +68,27 @@ function M.toggle_files()
   end
 end
 
+function M.upgrade()
+  local dir = vim.fn.stdpath('config')
+  vim.notify('Pulling latest config…')
+  vim.system({ 'git', '-C', dir, 'pull', '--ff-only' }, { text = true }, function(res)
+    vim.schedule(function()
+      local out = vim.trim((res.stdout or '') .. (res.stderr or ''))
+      if res.code ~= 0 then
+        vim.notify('Upgrade failed:\n' .. out, vim.log.levels.ERROR)
+      elseif out:find('Already up to date') then
+        vim.notify('Config already up to date.')
+      else
+        vim.notify('Config updated. Restart Neovim to apply.\n' .. out)
+      end
+    end)
+  end)
+end
+
 function M.setup()
   vim.api.nvim_create_user_command('Run', M.run, {})
+  vim.api.nvim_create_user_command('Upgrade', M.upgrade, { desc = 'Pull latest config from GitHub' })
+  vim.cmd([[cnoreabbrev <expr> upgrade getcmdtype() == ':' && getcmdline() ==# 'upgrade' ? 'Upgrade' : 'upgrade']])
   vim.keymap.set({ 'n', 'i', 't' }, '<F2>', M.toggle_files, { desc = 'Toggle files' })
   vim.keymap.set('n', '<leader>e', M.toggle_files, { desc = 'Toggle files' })
   vim.keymap.set({ 'n', 'i' }, '<F5>', M.run, { desc = 'Run current file' })

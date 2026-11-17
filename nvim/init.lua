@@ -189,6 +189,21 @@ local function toggle_agent()
 end
 
 vim.keymap.set({ 'n', 't' }, '<leader>-', toggle_agent, { desc = 'Toggle Claude Code agent' })
+
+-- While the agent is open, clicking or jumping elsewhere snaps focus back to it.
+vim.api.nvim_create_autocmd('WinEnter', {
+  callback = function()
+    if agent_state ~= 'active' or not agent_term then return end
+    local win = agent_term.window
+    if not win or vim.api.nvim_get_current_win() == win then return end
+    vim.schedule(function()
+      if agent_state == 'active' and vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_set_current_win(win)
+        vim.cmd.startinsert()
+      end
+    end)
+  end,
+})
 vim.keymap.set('n', '<leader>H', function() Snacks.picker.recent() end, { desc = "Recent files" })
 vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>', { desc = "Clear Search" })
 vim.opt.shiftwidth = 4   -- Number of spaces for each step of (auto)indent
