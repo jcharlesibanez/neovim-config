@@ -70,16 +70,22 @@ end
 
 function M.upgrade()
   local dir = vim.fn.stdpath('config')
-  vim.notify('Pulling latest config…')
+  local function head()
+    return vim.trim(vim.system({ 'git', '-C', dir, 'rev-parse', '--short', 'HEAD' }, { text = true }):wait().stdout or '')
+  end
+  local before = head()
+  vim.notify('Checking for updates…')
   vim.system({ 'git', '-C', dir, 'pull', '--ff-only' }, { text = true }, function(res)
     vim.schedule(function()
-      local out = vim.trim((res.stdout or '') .. (res.stderr or ''))
       if res.code ~= 0 then
-        vim.notify('Upgrade failed:\n' .. out, vim.log.levels.ERROR)
-      elseif out:find('Already up to date') then
-        vim.notify('Config already up to date.')
+        vim.notify('Upgrade failed:\n' .. vim.trim((res.stdout or '') .. (res.stderr or '')), vim.log.levels.ERROR)
+        return
+      end
+      local after = head()
+      if after == before then
+        vim.notify('Already on the latest version (' .. after .. ').')
       else
-        vim.notify('Config updated. Restart Neovim to apply.\n' .. out)
+        vim.notify('Updated to the latest version (' .. before .. ' → ' .. after .. '). Restart Neovim to apply.')
       end
     end)
   end)
