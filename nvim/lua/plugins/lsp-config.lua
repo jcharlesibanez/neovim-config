@@ -73,6 +73,9 @@ return {
       local luasnip = require("luasnip")
       require("luasnip.loaders.from_vscode").lazy_load()
       cmp.setup({
+        enabled = function()
+          return not vim.g.studymode and vim.bo.buftype ~= "prompt"
+        end,
         snippet = { expand = function(args) luasnip.lsp_expand(args.body) end },
         mapping = cmp.mapping.preset.insert({
           ["<C-Space>"] = cmp.mapping.complete(),
