@@ -221,6 +221,16 @@ vim.diagnostic.config({
   float = { border = "single", source = "if_many" },
 })
 
+vim.api.nvim_create_autocmd("InsertLeave", {
+  callback = function(args)
+    local bo = vim.bo[args.buf]
+    if bo.buftype == "" and bo.modifiable and not bo.readonly and bo.modified
+      and vim.api.nvim_buf_get_name(args.buf) ~= "" then
+      vim.cmd("silent! update")
+    end
+  end,
+})
+
 vim.api.nvim_create_autocmd("TextYankPost", {
   callback = function() vim.highlight.on_yank({ higroup = "IncSearch", timeout = 180 }) end,
 })
