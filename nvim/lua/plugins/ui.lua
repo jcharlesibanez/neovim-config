@@ -49,6 +49,12 @@ return {
         vim.api.nvim_set_hl(0, 'SnacksPickerInputBorder',  { fg = RED })
         vim.api.nvim_set_hl(0, 'SnacksNotifierBorderInfo', { fg = RED })
         vim.api.nvim_set_hl(0, 'SnacksNotifierTitleInfo',  { fg = RED })
+        -- Explorer / picker file names in neon red; hidden & ignored stay dimmer so they're distinguishable.
+        vim.api.nvim_set_hl(0, 'SnacksPickerFile',        { fg = RED })
+        vim.api.nvim_set_hl(0, 'SnacksPickerDirectory',   { fg = RED, bold = true })
+        vim.api.nvim_set_hl(0, 'SnacksPickerDir',         { fg = RED })
+        vim.api.nvim_set_hl(0, 'SnacksPickerPathHidden',  { fg = '#9a2a3c' })
+        vim.api.nvim_set_hl(0, 'SnacksPickerPathIgnored', { fg = '#6e1f2c' })
         -- Agent indicator badge
         vim.api.nvim_set_hl(0, 'AgentIndicator',       { fg = RED, bg = BG, bold = true })
         vim.api.nvim_set_hl(0, 'AgentIndicatorBorder', { fg = RED, bg = BG })
