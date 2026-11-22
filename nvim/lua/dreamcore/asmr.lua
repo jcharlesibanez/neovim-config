@@ -21,15 +21,33 @@ local mac = vim.fn.has('mac') == 1 and vim.fn.executable('osascript') == 1
 local job
 
 local function start_job()
-  if job then return end
-  job = vim.fn.jobstart({ 'osascript', '-l', 'JavaScript', mac_script }, {
-    on_exit = function() job = nil end,
+  if job then return true end
+  local id
+  id = vim.fn.jobstart({ 'osascript', '-l', 'JavaScript', mac_script }, {
+    -- Only clear our handle if it's still this job: a late exit from an old player
+    -- (e.g. :ASMR off then on) must not orphan the new one.
+    on_exit = function() if job == id then job = nil end end,
   })
-  if job <= 0 then job = nil end
+  job = id > 0 and id or nil
+  return job ~= nil
+end
+
+local function send(line)
+  if start_job() then pcall(vim.fn.chansend, job, line .. '\n') end
+end
+
+-- Load the current profile's clips into the player (also re-sent if it ever restarts).
+local loaded_for
+local function preload()
+  if not job then loaded_for = nil end
+  if loaded_for == profile then return end
+  send('load ' .. dir .. profile)
+  loaded_for = profile
 end
 
 local function stop_job()
   if job then vim.fn.jobstop(job); job = nil end
+  loaded_for = nil
 end
 
 -- Linux fallback: one short-lived process per key.
@@ -45,12 +63,12 @@ end
 local function play(kind)
   -- Throttle so key-repeat doesn't machine-gun sounds.
   local now = vim.uv.now()
-  if now - last < 12 then return end
+  if now - last < 15 then return end -- 15 ms = macOS fastest key repeat
   last = now
   local file = dir .. profile .. '/' .. (kind == 'key' and ('key' .. math.random(5)) or kind) .. '.wav'
   if mac then
-    start_job()
-    if job then pcall(vim.fn.chansend, job, file .. '\n') end
+    preload() -- no-op unless the player was (re)started
+    send(file)
     return
   end
   local cmd = spawn_cmd(file)
@@ -92,7 +110,7 @@ function M.set(arg)
     return
   end
   profile = n
-  if mac then start_job() end -- warm up so the first key isn't delayed
+  if mac then preload() end -- load clips now so the first keys aren't delayed
   vim.notify(('ASMR %d · %s  (:ASMR off to stop)'):format(n, NAMES[n]))
 end
 
