@@ -20,13 +20,15 @@ return {
         rosewater = "#ffd8dc", flamingo = "#ff90a0", pink = "#ff5878",
         mauve = "#ff1a3a",  -- PRIMARY ACCENT: neon red
         red = "#ff3d5c",    -- errors / emphasis
-        maroon = "#cc2040",
-        -- syntax: warm neutrals so non-red tokens don't compete
-        peach = "#d87050", yellow = "#d4a830", green = "#78b868",
-        teal = "#908060",
-        sky = "#c8a8a8",      -- warm neutral
-        sapphire = "#907878", -- warm rose
-        blue = "#a09090",     -- warm neutral (parameters, fields)
+        maroon = "#c9d1d9",   -- parameters: light grey
+        -- syntax: calm cool tones so code reads easily against the red UI
+        peach = "#b5e3ff",    -- numbers / constants: ice blue
+        yellow = "#5fd4c4",   -- types / classes: teal
+        green = "#9ccc7a",    -- strings: soft green
+        teal = "#5fd4c4",
+        sky = "#8b949e",      -- operators / punctuation: grey
+        sapphire = "#6cb6ff",
+        blue = "#e6e6e6",     -- functions: near-white
       } },
       integrations = { treesitter = true, native_lsp = { enabled = true }, gitsigns = true, snacks = true },
     },
@@ -50,6 +52,31 @@ return {
         -- Agent indicator badge
         vim.api.nvim_set_hl(0, 'AgentIndicator',       { fg = RED, bg = BG, bold = true })
         vim.api.nvim_set_hl(0, 'AgentIndicatorBorder', { fg = RED, bg = BG })
+
+        -- Line numbers: readable grey, current line bright white.
+        vim.api.nvim_set_hl(0, 'LineNr',       { fg = '#6b7280' })
+        vim.api.nvim_set_hl(0, 'LineNrAbove',  { fg = '#6b7280' })
+        vim.api.nvim_set_hl(0, 'LineNrBelow',  { fg = '#6b7280' })
+        vim.api.nvim_set_hl(0, 'CursorLineNr', { fg = '#ffffff', bold = true })
+
+        -- Keywords in calm blue instead of the neon-red accent.
+        local KEYWORD = '#6cb6ff'
+        for _, g in ipairs({
+          'Keyword', 'Statement', 'Conditional', 'Repeat', 'Include', 'Exception', 'StorageClass',
+          '@keyword', '@keyword.function', '@keyword.return', '@keyword.conditional',
+          '@keyword.conditional.ternary', '@keyword.repeat', '@keyword.import', '@keyword.operator',
+          '@keyword.exception', '@keyword.modifier', '@keyword.type', '@keyword.coroutine',
+          '@keyword.directive', '@keyword.directive.define', '@lsp.type.keyword',
+        }) do
+          vim.api.nvim_set_hl(0, g, { fg = KEYWORD })
+        end
+        -- Builtins (self, this, nullptr, true…) in ice blue, not error red.
+        for _, g in ipairs({ '@variable.builtin', '@constant.builtin', '@function.builtin',
+                             '@type.builtin', '@module.builtin', 'Boolean' }) do
+          vim.api.nvim_set_hl(0, g, { fg = '#b5e3ff' })
+        end
+        vim.api.nvim_set_hl(0, 'Comment',  { fg = '#6b7280', italic = true })
+        vim.api.nvim_set_hl(0, '@comment', { link = 'Comment' })
       end
 
       apply_borders()
