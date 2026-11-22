@@ -1,6 +1,6 @@
 -- :ASMR [1-5|off] — mechanical keyboard sounds on every keypress.
 local M = {}
-local NAMES = { 'thock', 'clicky', 'tactile', 'typewriter', 'marble' }
+local NAMES = { 'NK Cream', 'Box Navy', 'Holy Panda', 'buckling spring', 'Topre' }
 local dir = vim.fn.stdpath('config') .. '/sounds/asmr/'
 local ns = vim.api.nvim_create_namespace('asmr')
 local profile        -- nil = off
@@ -14,20 +14,47 @@ local SPECIAL = {
   [vim.keycode('<Del>')] = 'backspace',
 }
 
-local function player(file)
-  if vim.fn.executable('afplay') == 1 then return { 'afplay', '-v', '0.7', file } end -- macOS
-  if vim.fn.executable('paplay') == 1 then return { 'paplay', file } end            -- PulseAudio / PipeWire
-  if vim.fn.executable('aplay') == 1 then return { 'aplay', '-q', file } end         -- ALSA
+-- macOS: one long-running player with every clip preloaded (scripts/asmr_player.js).
+-- afplay-per-key lives ~1 s each, so fast typing piled up processes and dropped sounds.
+local mac_script = vim.fn.stdpath('config') .. '/scripts/asmr_player.js'
+local mac = vim.fn.has('mac') == 1 and vim.fn.executable('osascript') == 1
+local job
+
+local function start_job()
+  if job then return end
+  job = vim.fn.jobstart({ 'osascript', '-l', 'JavaScript', mac_script }, {
+    on_exit = function() job = nil end,
+  })
+  if job <= 0 then job = nil end
+end
+
+local function stop_job()
+  if job then vim.fn.jobstop(job); job = nil end
+end
+
+-- Linux fallback: one short-lived process per key.
+local function spawn_cmd(file)
+  if vim.fn.executable('paplay') == 1 then return { 'paplay', file } end   -- PulseAudio / PipeWire
+  if vim.fn.executable('aplay') == 1 then return { 'aplay', '-q', file } end -- ALSA
+end
+
+local function available()
+  return mac or spawn_cmd('') ~= nil
 end
 
 local function play(kind)
-  -- Throttle so key-repeat or a burst of input doesn't spawn dozens of players.
+  -- Throttle so key-repeat doesn't machine-gun sounds.
   local now = vim.uv.now()
-  if now - last < 18 or playing >= 6 then return end
+  if now - last < 12 then return end
   last = now
-  local file = dir .. profile .. '/' .. (kind == 'key' and ('key' .. math.random(4)) or kind) .. '.wav'
-  local cmd = player(file)
-  if not cmd then return end
+  local file = dir .. profile .. '/' .. (kind == 'key' and ('key' .. math.random(5)) or kind) .. '.wav'
+  if mac then
+    start_job()
+    if job then pcall(vim.fn.chansend, job, file .. '\n') end
+    return
+  end
+  local cmd = spawn_cmd(file)
+  if not cmd or playing >= 12 then return end
   playing = playing + 1
   vim.system(cmd, { stdout = false, stderr = false }, function() playing = playing - 1 end)
 end
@@ -51,6 +78,7 @@ function M.set(arg)
   arg = vim.trim(arg or '')
   if arg == 'off' or arg == '0' then
     profile = nil
+    stop_job()
     vim.notify('ASMR off')
     return
   end
@@ -59,20 +87,22 @@ function M.set(arg)
     vim.notify('Usage: :ASMR [1-5|off]', vim.log.levels.WARN)
     return
   end
-  if not player('') then
-    vim.notify('No audio player found (need afplay, paplay or aplay).', vim.log.levels.WARN)
+  if not available() then
+    vim.notify('No audio player found (need macOS, paplay or aplay).', vim.log.levels.WARN)
     return
   end
   profile = n
+  if mac then start_job() end -- warm up so the first key isn't delayed
   vim.notify(('ASMR %d · %s  (:ASMR off to stop)'):format(n, NAMES[n]))
 end
 
 function M.setup()
   vim.on_key(on_key, ns)
+  vim.api.nvim_create_autocmd('VimLeavePre', { callback = stop_job })
   vim.api.nvim_create_user_command('ASMR', function(o) M.set(o.args) end, {
     nargs = '?',
     complete = function() return { '1', '2', '3', '4', '5', 'off' } end,
-    desc = 'Mechanical keyboard sounds: 1 thock, 2 clicky, 3 tactile, 4 typewriter, 5 marble',
+    desc = 'Keyboard sounds: 1 Cream, 2 Box Navy, 3 Holy Panda, 4 buckling spring, 5 Topre',
   })
   vim.cmd([[cnoreabbrev <expr> asmr getcmdtype() == ':' && getcmdline() ==# 'asmr' ? 'ASMR' : 'asmr']])
 end
