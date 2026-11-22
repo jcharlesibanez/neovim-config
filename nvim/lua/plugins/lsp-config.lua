@@ -6,7 +6,7 @@ return {
       {
         "williamboman/mason-lspconfig.nvim",
         opts = {
-          ensure_installed = { "lua_ls", "ts_ls", "html", "pyright", "clangd" },
+          ensure_installed = { "lua_ls", "ts_ls", "html", "pyright", "clangd", "neocmake" },
           automatic_enable = true,
         },
       },
@@ -41,7 +41,7 @@ return {
         end,
       })
       vim.lsp.config("clangd", { cmd = { "clangd", "--background-index", "--clang-tidy" } })
-      vim.lsp.enable({ "lua_ls", "ts_ls", "html", "cssls", "jsonls", "eslint", "pyright", "clangd" })
+      vim.lsp.enable({ "lua_ls", "ts_ls", "html", "cssls", "jsonls", "eslint", "pyright", "clangd", "neocmake" })
 
       vim.api.nvim_create_autocmd("LspAttach", {
         callback = function(event)
@@ -114,8 +114,15 @@ return {
   {
     "stevearc/conform.nvim",
     event = { "BufWritePre" },
+    cmd = { "ConformInfo" },
+    -- Manual only: nothing formats on save.
+    keys = {
+      { "<leader>cf", function() require("conform").format({ async = true }) end, mode = { "n", "v" }, desc = "Format file/selection" },
+    },
     opts = {
       formatters_by_ft = {
+        c = { "clang_format" },
+        cpp = { "clang_format" },
         javascript = { "prettier", stop_after_first = true },
         javascriptreact = { "prettier", stop_after_first = true },
         typescript = { "prettier", stop_after_first = true },
@@ -128,6 +135,10 @@ return {
       },
       formatters = {
         prettier = { require_cwd = true },
+        -- A project .clang-format wins; otherwise keep 4-space indent and `string& name`.
+        clang_format = {
+          prepend_args = { "--fallback-style={BasedOnStyle: LLVM, IndentWidth: 4, PointerAlignment: Left, ColumnLimit: 110}" },
+        },
       },
     },
   },

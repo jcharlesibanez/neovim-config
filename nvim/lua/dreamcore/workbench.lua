@@ -26,24 +26,79 @@ function M.command(file, ft)
     return shell({ compiler, ft == 'cpp' and '-std=c++20' or '-std=c17', '-Wall', '-Wextra', '-g', file, '-o', output })
       .. ' && ' .. vim.fn.shellescape(output) .. '; result=$?; rm -f ' .. vim.fn.shellescape(output) .. '; exit $result'
   end
-  return nil, 'Run supports Python, C++, C, or a web project with :Start.'
+  return nil, 'Run supports Python, C++, C, CMake projects, or a web project with :Start.'
 end
 
-function M.run()
-  local file, ft = vim.api.nvim_buf_get_name(0), vim.bo.filetype
-  if vim.bo.buftype ~= '' or file == '' then vim.notify('Open and save a code file first.'); return end
-  if vim.tbl_contains({ 'javascript', 'typescript', 'javascriptreact', 'typescriptreact', 'html', 'css' }, ft) then vim.cmd.Start(); return end
-  local cmd, err = M.command(file, ft)
-  if not cmd then vim.notify(err, vim.log.levels.WARN); return end
-  vim.cmd.update()
+-- ── CMake projects ─────────────────────────────────────────────────────────
+
+-- Outermost folder with a CMakeLists.txt, so subdirectory CMakeLists don't win.
+local function cmake_root(file)
+  local root
+  for dir in vim.fs.parents(file) do
+    if vim.fn.filereadable(dir .. '/CMakeLists.txt') == 1 then root = dir end
+    if vim.fn.isdirectory(dir .. '/.git') == 1 then break end
+  end
+  return root
+end
+
+-- First add_executable() target in the root CMakeLists.txt, e.g. "rover".
+local function cmake_target(root)
+  local text = table.concat(vim.fn.readfile(root .. '/CMakeLists.txt'), '\n'):gsub('#[^\n]*', '')
+  return text:match('add_executable%s*%(%s*([%w_%-%.]+)')
+end
+
+local build_log = vim.fn.tempname() .. '-build.log'
+
+-- Configure only when there's no build dir yet (FetchContent downloads are slow),
+-- then build. Output is teed to a log so errors can go to quickfix afterwards.
+local function cmake_command(root, run)
+  local log = vim.fn.shellescape(build_log)
+  local steps = {}
+  if vim.fn.filereadable(root .. '/build/CMakeCache.txt') == 0 then
+    table.insert(steps, 'cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON')
+  end
+  table.insert(steps, 'cmake --build build -j')
+  local cmd = 'set -o pipefail; { ' .. table.concat(steps, ' && ') .. '; } 2>&1 | tee ' .. log
+  if run then
+    local target = cmake_target(root)
+    if not target then return nil, 'No add_executable() found in CMakeLists.txt.' end
+    cmd = cmd .. ' && echo && ./build/' .. vim.fn.shellescape(target)
+  end
+  return cmd
+end
+
+-- Turn compiler errors/warnings from the build log into the quickfix list.
+local function load_build_errors()
+  if vim.fn.filereadable(build_log) == 0 then return end
+  vim.fn.setqflist({}, ' ', {
+    title = 'CMake build',
+    lines = vim.fn.readfile(build_log),
+    efm = '%f:%l:%c: %trror: %m,%f:%l:%c: %tarning: %m,%f:%l: %trror: %m,%-G%.%#',
+  })
+  vim.fn.delete(build_log)
+  local errors, warnings = 0, 0
+  for _, item in ipairs(vim.fn.getqflist()) do
+    if item.valid == 1 and item.type == 'e' then errors = errors + 1
+    elseif item.valid == 1 and item.type == 'w' then warnings = warnings + 1 end
+  end
+  if errors + warnings > 0 then
+    vim.notify(('Build: %d error(s), %d warning(s). <leader>x lists them, ]q / [q jump.'):format(errors, warnings),
+      errors > 0 and vim.log.levels.ERROR or vim.log.levels.WARN)
+  end
+end
+
+-- ── Bottom output terminal ─────────────────────────────────────────────────
+
+local function open_terminal(cmd, dir, name, on_exit)
   if terminal and terminal.job_id and vim.fn.jobwait({ terminal.job_id }, 0)[1] == -1 then
     terminal:open(); vim.notify('Your program is still running. Use Ctrl-C to stop it.'); return
   end
   if terminal then terminal:shutdown() end
   local h = 12
   terminal = require('toggleterm.terminal').Terminal:new({
-    cmd = cmd, dir = vim.fs.dirname(file), direction = 'float', hidden = true,
-    close_on_exit = false, display_name = 'Run · ' .. vim.fs.basename(file),
+    cmd = cmd, dir = dir, direction = 'float', hidden = true,
+    close_on_exit = false, display_name = name,
+    on_exit = on_exit and function() vim.schedule(on_exit) end or nil,
     float_opts = {
       border  = 'single',
       width   = function() return vim.o.columns - 4 end,
@@ -57,6 +112,32 @@ function M.run()
     end,
   })
   terminal:open()
+end
+
+-- Build (and optionally run) the CMake project containing the current file.
+local function cmake(run)
+  local file = vim.api.nvim_buf_get_name(0)
+  local root = cmake_root(file ~= '' and file or vim.fn.getcwd() .. '/x')
+  if not root then vim.notify('No CMakeLists.txt found above this file.', vim.log.levels.WARN); return false end
+  if vim.fn.executable('cmake') == 0 then vim.notify('Install CMake first: brew install cmake', vim.log.levels.WARN); return true end
+  local cmd, err = cmake_command(root, run)
+  if not cmd then vim.notify(err, vim.log.levels.WARN); return true end
+  vim.cmd('silent! wall')
+  open_terminal(cmd, root, (run and 'Run · ' or 'Build · ') .. vim.fs.basename(root), load_build_errors)
+  return true
+end
+
+function M.build() cmake(false) end
+
+function M.run()
+  local file, ft = vim.api.nvim_buf_get_name(0), vim.bo.filetype
+  if vim.tbl_contains({ 'c', 'cpp', 'cmake' }, ft) and file ~= '' and cmake_root(file) then cmake(true); return end
+  if vim.bo.buftype ~= '' or file == '' then vim.notify('Open and save a code file first.'); return end
+  if vim.tbl_contains({ 'javascript', 'typescript', 'javascriptreact', 'typescriptreact', 'html', 'css' }, ft) then vim.cmd.Start(); return end
+  local cmd, err = M.command(file, ft)
+  if not cmd then vim.notify(err, vim.log.levels.WARN); return end
+  vim.cmd.update()
+  open_terminal(cmd, vim.fs.dirname(file), 'Run · ' .. vim.fs.basename(file))
 end
 
 function M.toggle_files()
@@ -93,12 +174,18 @@ end
 
 function M.setup()
   vim.api.nvim_create_user_command('Run', M.run, {})
+  vim.api.nvim_create_user_command('Build', M.build, { desc = 'Build the CMake project (errors → quickfix)' })
   vim.api.nvim_create_user_command('Upgrade', M.upgrade, { desc = 'Pull latest config from GitHub' })
   vim.cmd([[cnoreabbrev <expr> upgrade getcmdtype() == ':' && getcmdline() ==# 'upgrade' ? 'Upgrade' : 'upgrade']])
+  vim.cmd([[cnoreabbrev <expr> build getcmdtype() == ':' && getcmdline() ==# 'build' ? 'Build' : 'build']])
   vim.keymap.set({ 'n', 'i', 't' }, '<F2>', M.toggle_files, { desc = 'Toggle files' })
   vim.keymap.set('n', '<leader>e', M.toggle_files, { desc = 'Toggle files' })
-  vim.keymap.set({ 'n', 'i' }, '<F5>', M.run, { desc = 'Run current file' })
-  vim.keymap.set('n', '<leader>r', M.run, { desc = 'Run current file' })
+  vim.keymap.set({ 'n', 'i' }, '<F5>', M.run, { desc = 'Run current file / CMake project' })
+  vim.keymap.set('n', '<leader>r', M.run, { desc = 'Run current file / CMake project' })
+  vim.keymap.set('n', '<leader>b', M.build, { desc = 'Build CMake project' })
+  vim.keymap.set('n', '<leader>x', function()
+    vim.cmd(vim.fn.getqflist({ winid = 0 }).winid ~= 0 and 'cclose' or 'botright copen')
+  end, { desc = 'Toggle build errors (quickfix)' })
   vim.cmd([[cnoreabbrev <expr> run getcmdtype() == ':' && getcmdline() ==# 'run' ? 'Run' : 'run']])
 end
 

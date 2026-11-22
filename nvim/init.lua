@@ -57,16 +57,13 @@ require("lazy").setup({
       branch = "master", -- Neovim 0.11-compatible API; main currently requires 0.12.
       build = ":TSUpdate",
       config = function()
-        require("nvim-treesitter").setup({
+        -- The master branch reads ensure_installed from configs.setup, not the top-level setup.
+        require("nvim-treesitter.configs").setup({
           ensure_installed = {
-            "lua", "vim", "vimdoc", "python", "c", "cpp",
+            "lua", "vim", "vimdoc", "python", "c", "cpp", "cmake", "markdown", "markdown_inline",
             "javascript", "typescript", "tsx", "html", "css", "json", "jsonc",
           },
-        })
-        vim.api.nvim_create_autocmd("FileType", {
-          callback = function(args)
-            pcall(vim.treesitter.start, args.buf)
-          end,
+          highlight = { enable = true },
         })
       end,
     },
