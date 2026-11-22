@@ -42,8 +42,8 @@ function M.toggle()
   pcall(vim.lsp.inlay_hint.enable, false)
   local ok, cmp = pcall(require, 'cmp')
   if ok and on then cmp.close() end
+  -- The badge is the only feedback; no notification popup.
   if on then open_badge() else close_badge() end
-  vim.notify(on and 'Study mode on — no errors, no suggestions.' or 'Study mode off.')
 end
 
 function M.setup()

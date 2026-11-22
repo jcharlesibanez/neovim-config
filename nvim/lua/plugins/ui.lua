@@ -59,6 +59,10 @@ return {
         vim.api.nvim_set_hl(0, 'AgentIndicator',       { fg = RED, bg = BG, bold = true })
         vim.api.nvim_set_hl(0, 'AgentIndicatorBorder', { fg = RED, bg = BG })
 
+        -- Lines a pending `d{count}j/k` would delete.
+        vim.api.nvim_set_hl(0, 'DeletePreview',   { fg = '#080608', bg = RED, bold = true })
+        vim.api.nvim_set_hl(0, 'DeletePreviewUp', { fg = '#ffd8dc', bg = '#5a1020', bold = true })
+
         -- Line numbers: readable grey, current line bright white.
         vim.api.nvim_set_hl(0, 'LineNr',       { fg = '#6b7280' })
         vim.api.nvim_set_hl(0, 'LineNrAbove',  { fg = '#6b7280' })
