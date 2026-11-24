@@ -73,6 +73,9 @@ return {
         vim.api.nvim_set_hl(0, 'LineNrAbove',  { fg = '#6b7280' })
         vim.api.nvim_set_hl(0, 'LineNrBelow',  { fg = '#6b7280' })
         vim.api.nvim_set_hl(0, 'CursorLineNr', { fg = '#ffffff', bold = true })
+        -- No bar behind the cursor's line: on a see-through terminal it showed as an opaque
+        -- black strip. The bold white line number marks the current line instead.
+        vim.api.nvim_set_hl(0, 'CursorLine', { bg = 'NONE' })
 
         -- Keywords in calm blue instead of the neon-red accent.
         local KEYWORD = '#6cb6ff'

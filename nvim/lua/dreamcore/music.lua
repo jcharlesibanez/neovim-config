@@ -1,11 +1,14 @@
--- :Music [next|prev|off|<spotify link>] — control the Spotify app, with a grey italic
+-- :Music [pause|unpause|next|prev|off|<spotify link>] — control the Spotify app, with a grey italic
 -- "now playing" badge in the bottom right. Uses Spotify's own AppleScript interface, so the
 -- music is played by the real Spotify app on your account.
 local M = {}
 
 -- Default playlist for :Music ("ANYTHING ELSE"). Any Spotify link or URI works.
 local PLAYLIST = 'spotify:playlist:4wVWND3UOHdYMEB2CMhAAL'
-local ICON = '🔊' -- Monaco has no speaker glyph; macOS terminals draw this from the emoji font
+-- Monaco has neither glyph; macOS terminals draw these from the emoji font. The pause sign
+-- needs its emoji variation selector (U+FE0F) so Neovim and the terminal agree it's 2 columns.
+local ICON = '🔊'
+local PAUSE_ICON = '⏸\u{FE0F}'
 local MAX_WIDTH = 48
 local POLL_MS = 2000
 
@@ -37,8 +40,8 @@ local function close_badge()
   badge_win, last_text = nil, nil
 end
 
-local function draw_badge(what)
-  local text = ' ' .. ICON .. ' ' .. what .. ' '
+local function draw_badge(what, icon)
+  local text = ' ' .. (icon or ICON) .. ' ' .. what .. ' '
   if vim.fn.strdisplaywidth(text) > MAX_WIDTH then
     while vim.fn.strdisplaywidth(text) > MAX_WIDTH - 2 do text = vim.fn.strcharpart(text, 0, vim.fn.strchars(text) - 1) end
     text = text .. '… '
@@ -82,10 +85,11 @@ local function poll()
   osa(STATUS, function(out)
     if not active then return end
     local state, name, artist = unpack(vim.split(out, '\n'))
-    if state == 'playing' and name and name ~= '' then
-      draw_badge((artist and artist ~= '' and (artist .. ' – ') or '') .. name)
+    local track = name and name ~= '' and ((artist and artist ~= '' and (artist .. ' – ') or '') .. name)
+    if state == 'playing' and track then
+      draw_badge(track)
     elseif state == 'paused' then
-      draw_badge('paused')
+      draw_badge(track or 'paused', PAUSE_ICON) -- same song, pause sign instead of the speaker
     else
       close_badge()
     end
@@ -128,6 +132,10 @@ function M.command(arg)
   end
   if arg == 'off' or (arg == '' and active) then
     tell('pause'); stop_polling()
+  elseif arg == 'pause' then
+    tell('pause', function() poll() end); start_polling()
+  elseif arg == 'unpause' then
+    tell('play', function() vim.defer_fn(poll, 300) end); start_polling()
   elseif arg == 'next' then
     tell('next track', function() vim.defer_fn(poll, 400) end); start_polling()
   elseif arg == 'prev' then
@@ -139,15 +147,15 @@ function M.command(arg)
     end
   else
     local uri = to_uri(arg)
-    if uri then play_uri(uri) else vim.notify('Usage: :Music [next|prev|off|<spotify link>]', vim.log.levels.WARN) end
+    if uri then play_uri(uri) else vim.notify('Usage: :Music [pause|unpause|next|prev|off|<spotify link>]', vim.log.levels.WARN) end
   end
 end
 
 function M.setup()
   vim.api.nvim_create_user_command('Music', function(o) M.command(o.args) end, {
     nargs = '?',
-    complete = function() return { 'next', 'prev', 'off' } end,
-    desc = 'Spotify: play playlist / toggle, next, prev, off',
+    complete = function() return { 'pause', 'unpause', 'next', 'prev', 'off' } end,
+    desc = 'Spotify: play playlist / toggle, pause, unpause, next, prev, off',
   })
   vim.cmd([[cnoreabbrev <expr> music getcmdtype() == ':' && getcmdline() ==# 'music' ? 'Music' : 'music']])
   vim.api.nvim_create_autocmd('VimResized', { callback = poll })
