@@ -52,11 +52,15 @@ return {
         vim.api.nvim_set_hl(0, 'SnacksNotifierBorderInfo', { fg = RED })
         vim.api.nvim_set_hl(0, 'SnacksNotifierTitleInfo',  { fg = RED })
         -- Explorer / picker file names in neon red; hidden & ignored stay dimmer so they're distinguishable.
-        vim.api.nvim_set_hl(0, 'SnacksPickerFile',        { fg = RED })
-        vim.api.nvim_set_hl(0, 'SnacksPickerDirectory',   { fg = RED, bold = true })
-        vim.api.nvim_set_hl(0, 'SnacksPickerDir',         { fg = RED })
-        vim.api.nvim_set_hl(0, 'SnacksPickerPathHidden',  { fg = '#9a2a3c' })
-        vim.api.nvim_set_hl(0, 'SnacksPickerPathIgnored', { fg = '#6e1f2c' })
+        -- Names in a lighter red than the borders, all the same weight; only the item under
+        -- the cursor is bold (no bar behind it, so the terminal shows through).
+        local NAME = '#ff7a8c'
+        vim.api.nvim_set_hl(0, 'SnacksPickerFile',        { fg = NAME })
+        vim.api.nvim_set_hl(0, 'SnacksPickerDirectory',   { fg = NAME })
+        vim.api.nvim_set_hl(0, 'SnacksPickerDir',         { fg = NAME })
+        vim.api.nvim_set_hl(0, 'SnacksPickerPathHidden',  { fg = '#c25a6c' })
+        vim.api.nvim_set_hl(0, 'SnacksPickerPathIgnored', { fg = '#94485a' })
+        vim.api.nvim_set_hl(0, 'SnacksPickerListCursorLine', { bg = 'NONE', bold = true })
         -- Agent indicator badge
         vim.api.nvim_set_hl(0, 'AgentIndicator',       { fg = RED, bg = BG, bold = true })
         vim.api.nvim_set_hl(0, 'AgentIndicatorBorder', { fg = RED, bg = BG })

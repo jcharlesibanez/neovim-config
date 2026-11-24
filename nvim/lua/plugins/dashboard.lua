@@ -14,6 +14,9 @@ return {
       sources = {
         explorer = {
           auto_close = false,
+          -- Keep names in the explorer's red; the ?/✖ column still shows git status.
+          -- (Otherwise untracked files take git's dim "NonText" color.)
+          formatters = { file = { git_status_hl = false } },
           actions = {
             workspace_new = function(picker) require("dreamcore.files").prompt(picker) end,
             workspace_files = function() require('dreamcore.workbench').toggle_files() end,
