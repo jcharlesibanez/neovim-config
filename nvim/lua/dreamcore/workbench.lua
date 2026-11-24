@@ -149,6 +149,25 @@ function M.toggle_files()
   end
 end
 
+-- Ctrl-l: hop between the explorer and the file you're editing, keeping both open.
+local function is_explorer(win) return vim.bo[vim.api.nvim_win_get_buf(win)].filetype:match('^snacks_') ~= nil end
+
+function M.hop_files()
+  local picker = Snacks.picker.get({ source = 'explorer' })[1]
+  if not picker then Snacks.explorer({ cwd = vim.fn.getcwd() }); return end
+  if not is_explorer(vim.api.nvim_get_current_win()) then picker:focus('list'); return end
+  -- In the explorer: go back to the window we came from, else the first normal file window.
+  local prev = vim.fn.win_getid(vim.fn.winnr('#'))
+  if prev ~= 0 and not is_explorer(prev) and vim.api.nvim_win_get_config(prev).relative == '' then
+    vim.api.nvim_set_current_win(prev); return
+  end
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if not is_explorer(win) and vim.api.nvim_win_get_config(win).relative == '' then
+      vim.api.nvim_set_current_win(win); return
+    end
+  end
+end
+
 function M.upgrade()
   local dir = vim.fn.stdpath('config')
   local function head()
@@ -180,6 +199,7 @@ function M.setup()
   vim.cmd([[cnoreabbrev <expr> build getcmdtype() == ':' && getcmdline() ==# 'build' ? 'Build' : 'build']])
   vim.keymap.set({ 'n', 'i', 't' }, '<F2>', M.toggle_files, { desc = 'Toggle files' })
   vim.keymap.set('n', '<leader>e', M.toggle_files, { desc = 'Toggle files' })
+  vim.keymap.set('n', '<C-l>', M.hop_files, { desc = 'Hop between explorer and file' })
   vim.keymap.set({ 'n', 'i' }, '<F5>', M.run, { desc = 'Run current file / CMake project' })
   vim.keymap.set('n', '<leader>r', M.run, { desc = 'Run current file / CMake project' })
   vim.keymap.set('n', '<leader>b', M.build, { desc = 'Build CMake project' })
