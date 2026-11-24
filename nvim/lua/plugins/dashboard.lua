@@ -17,6 +17,16 @@ return {
           -- Keep names in the explorer's red; the ?/✖ column still shows git status.
           -- (Otherwise untracked files take git's dim "NonText" color.)
           formatters = { file = { git_status_hl = false } },
+          -- Open folders get their own highlight (bold neon red) so they stand out.
+          format = function(item, picker)
+            local ret = Snacks.picker.format.file(item, picker)
+            if item.dir and item.open then
+              for _, seg in ipairs(ret) do
+                if seg[2] == 'SnacksPickerDirectory' then seg[2] = 'SnacksPickerDirectoryOpen' end
+              end
+            end
+            return ret
+          end,
           actions = {
             workspace_new = function(picker) require("dreamcore.files").prompt(picker) end,
             workspace_files = function() require('dreamcore.workbench').toggle_files() end,

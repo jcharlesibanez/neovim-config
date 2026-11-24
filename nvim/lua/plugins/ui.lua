@@ -57,6 +57,7 @@ return {
         local NAME = '#ff7a8c'
         vim.api.nvim_set_hl(0, 'SnacksPickerFile',        { fg = NAME })
         vim.api.nvim_set_hl(0, 'SnacksPickerDirectory',   { fg = NAME })
+        vim.api.nvim_set_hl(0, 'SnacksPickerDirectoryOpen', { fg = RED, bold = true }) -- open folders
         vim.api.nvim_set_hl(0, 'SnacksPickerDir',         { fg = NAME })
         vim.api.nvim_set_hl(0, 'SnacksPickerPathHidden',  { fg = '#c25a6c' })
         vim.api.nvim_set_hl(0, 'SnacksPickerPathIgnored', { fg = '#94485a' })
