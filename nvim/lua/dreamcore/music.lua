@@ -13,6 +13,7 @@ local MAX_WIDTH = 48
 local POLL_MS = 2000
 
 local active = false -- :Music is on: poll Spotify and show the badge
+local starting = false -- Spotify is launching: keep the "starting" badge up meanwhile
 local badge_win, poll_timer, last_text
 
 -- ── Spotify ────────────────────────────────────────────────────────────────
@@ -90,7 +91,7 @@ local function poll()
       draw_badge(track)
     elseif state == 'paused' then
       draw_badge(track or 'paused', PAUSE_ICON) -- same song, pause sign instead of the speaker
-    else
+    elseif not starting then
       close_badge()
     end
   end)
@@ -112,15 +113,60 @@ end
 
 -- ── Commands ───────────────────────────────────────────────────────────────
 
+-- Bundle id of the app in front (the terminal Neovim runs in when you type :Music).
+local function frontmost(cb)
+  vim.system({ 'osascript', '-l', 'JavaScript', '-e',
+    'ObjC.import("AppKit"); $.NSWorkspace.sharedWorkspace.frontmostApplication.bundleIdentifier.js' },
+    { text = true }, function(res) vim.schedule(function() cb(vim.trim(res.stdout or '')) end) end)
+end
+
+-- Play in the background. Telling a closed Spotify to play launches it normally, which brings
+-- its window to the front; instead launch it hidden (`open -g -j`), wait until it answers,
+-- then play. If it grabs focus anyway, give focus back to the terminal.
 local function play_uri(uri)
+  starting = true
   draw_badge('starting Spotify…')
   start_polling()
-  tell(('play track "%s"'):format(uri), function(_, code)
-    if code ~= 0 then
-      stop_polling()
-      vim.notify('Music: could not start Spotify. Is it installed and logged in?', vim.log.levels.WARN)
+  frontmost(function(home)
+    local function give_back_focus()
+      frontmost(function(now)
+        if now == 'com.spotify.client' and home ~= '' and home ~= now then vim.system({ 'open', '-b', home }) end
+      end)
     end
-    vim.defer_fn(poll, 800)
+    local function play(retry)
+      tell(('play track "%s"'):format(uri), function(_, code)
+        if code ~= 0 then
+          starting = false
+          stop_polling()
+          vim.notify('Music: could not start Spotify. Is it installed and logged in?', vim.log.levels.WARN)
+          return
+        end
+        give_back_focus()
+        -- A freshly launched Spotify sometimes ignores the first request: check, retry once.
+        vim.defer_fn(function()
+          tell('return player state as string', function(state)
+            if state ~= 'playing' and retry then play(false) return end
+            starting = false
+            give_back_focus()
+            poll()
+          end)
+        end, 1500)
+      end)
+    end
+    osa('return application "Spotify" is running', function(running)
+      if running == 'true' then play(true) return end
+      vim.system({ 'open', '-g', '-j', '-a', 'Spotify' }) -- -g: don't bring to front, -j: launch hidden
+      local tries = 0
+      local function wait_ready()
+        tries = tries + 1
+        osa('if application "Spotify" is running then tell application "Spotify" to return player state as string',
+          function(state)
+            if state ~= '' or tries >= 30 then vim.defer_fn(function() play(true) end, 1500)
+            else vim.defer_fn(wait_ready, 500) end
+          end)
+      end
+      vim.defer_fn(wait_ready, 500)
+    end)
   end)
 end
 
