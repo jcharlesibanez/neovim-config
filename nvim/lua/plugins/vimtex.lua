@@ -21,8 +21,13 @@ return {
         vim.g.vimtex_view_general_viewer = "open"
       end
 
-      -- Only pop up the quickfix list for errors, not for every warning.
-      vim.g.vimtex_quickfix_open_on_warning = 0
+      -- Live preview compiles constantly and half-typed LaTeX fails often: don't pop the
+      -- error list open or print a message on every compile. <space>le shows errors.
+      vim.g.vimtex_quickfix_mode = 0
+      vim.g.vimtex_compiler_silent = 1
+    end,
+    config = function()
+      require("dreamcore.latex").setup() -- live preview: Skim on the right, refresh as you type
     end,
   },
 }

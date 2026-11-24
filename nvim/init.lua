@@ -225,6 +225,7 @@ vim.diagnostic.config({
 })
 
 vim.api.nvim_create_autocmd("InsertLeave", {
+  nested = true, -- let the save fire BufWritePost (e.g. the LaTeX live-preview compile)
   callback = function(args)
     local bo = vim.bo[args.buf]
     if bo.buftype == "" and bo.modifiable and not bo.readonly and bo.modified
@@ -233,6 +234,25 @@ vim.api.nvim_create_autocmd("InsertLeave", {
     end
   end,
 })
+
+-- Pasting with Cmd-V in normal mode never enters insert mode, so the InsertLeave autosave
+-- above never fired and pasted text stayed unsaved. Save after pastes as well.
+do
+  local paste = vim.paste
+  vim.paste = function(lines, phase)
+    local ok = paste(lines, phase)
+    if phase == -1 or phase == 3 then -- paste finished (single chunk, or last chunk)
+      vim.schedule(function()
+        local bo = vim.bo
+        if vim.fn.mode() ~= "i" and bo.buftype == "" and bo.modifiable and not bo.readonly
+          and vim.api.nvim_buf_get_name(0) ~= "" then
+          vim.cmd("silent! update")
+        end
+      end)
+    end
+    return ok
+  end
+end
 
 vim.api.nvim_create_autocmd("TextYankPost", {
   callback = function() vim.highlight.on_yank({ higroup = "IncSearch", timeout = 180 }) end,
