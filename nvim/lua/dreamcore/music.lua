@@ -207,6 +207,8 @@ function M.setup()
   -- :Next / :Prev skip tracks. Vim's built-in :Next (previous file in the arg list) can't be
   -- overridden by a user command, so a typed `:Next` is rewritten to `:Music next` instead.
   vim.api.nvim_create_user_command('Prev', function() M.command('prev') end, { desc = 'Spotify: previous track' })
+  vim.api.nvim_create_user_command('Pause', function() M.command('pause') end, { desc = 'Spotify: pause' })
+  vim.api.nvim_create_user_command('Unpause', function() M.command('unpause') end, { desc = 'Spotify: resume' })
   vim.cmd([[cnoreabbrev <expr> Next getcmdtype() == ':' && getcmdline() ==# 'Next' ? 'Music next' : 'Next']])
   vim.api.nvim_create_autocmd('VimResized', { callback = poll })
   -- Quitting Neovim leaves Spotify playing; it's its own app. :Music off pauses it.
