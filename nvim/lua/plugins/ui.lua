@@ -6,7 +6,9 @@ return {
     priority = 1100,
     opts = {
       flavour = "mocha",
-      transparent_background = false,
+      -- Use the terminal's own background everywhere (editor, floats, sidebars).
+      transparent_background = true,
+      float = { transparent = true },
       color_overrides = { mocha = {
         -- backgrounds: near-black with faint red warmth
         crust = "#030203", base = "#080608", mantle = "#0d080d",
@@ -37,7 +39,7 @@ return {
       vim.cmd.colorscheme("catppuccin-mocha")
 
       local RED = '#ff1a3a'
-      local BG  = '#0d080d'
+      local BG  = 'NONE' -- transparent: show the terminal's background
 
       local function apply_borders()
         -- Universal border colour — applies to every float and split
@@ -60,7 +62,7 @@ return {
         vim.api.nvim_set_hl(0, 'AgentIndicatorBorder', { fg = RED, bg = BG })
 
         -- Dim grey italic: :Music now-playing badge, LaTeX preview page bar.
-        vim.api.nvim_set_hl(0, 'BadgeDim', { fg = '#8b949e', bg = '#080608', italic = true })
+        vim.api.nvim_set_hl(0, 'BadgeDim', { fg = '#8b949e', bg = BG, italic = true })
 
         -- Lines a pending `d{count}j/k` would delete.
         vim.api.nvim_set_hl(0, 'DeletePreview',   { fg = '#080608', bg = RED, bold = true })

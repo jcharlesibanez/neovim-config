@@ -5,7 +5,7 @@ return {
     opts = {
       size = function() return math.floor(vim.o.lines * 0.72) end,
       direction = "float",
-      shade_terminals = true,
+      shade_terminals = false, -- same background as the rest of the terminal
       shading_factor = 2,
       start_in_insert = true,
       persist_size = true,
