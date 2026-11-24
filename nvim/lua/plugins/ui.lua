@@ -59,6 +59,9 @@ return {
         vim.api.nvim_set_hl(0, 'AgentIndicator',       { fg = RED, bg = BG, bold = true })
         vim.api.nvim_set_hl(0, 'AgentIndicatorBorder', { fg = RED, bg = BG })
 
+        -- :Lofi now-playing badge.
+        vim.api.nvim_set_hl(0, 'LofiBadge', { fg = '#8b949e', bg = '#080608', italic = true })
+
         -- Lines a pending `d{count}j/k` would delete.
         vim.api.nvim_set_hl(0, 'DeletePreview',   { fg = '#080608', bg = RED, bold = true })
         vim.api.nvim_set_hl(0, 'DeletePreviewUp', { fg = '#ffd8dc', bg = '#5a1020', bold = true })
