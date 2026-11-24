@@ -12,6 +12,13 @@ if vim.fn.argc() == 1 and vim.fn.isdirectory(vim.fn.argv(0)) == 1 then
       vim.api.nvim_buf_delete(buf, { force = false })
     end
   end
+  -- `nvim .` / `nvim some/folder`: open the file explorer with the cursor in it.
+  vim.api.nvim_create_autocmd("VimEnter", {
+    once = true,
+    callback = function()
+      vim.schedule(function() Snacks.explorer({ cwd = vim.fn.getcwd() }) end)
+    end,
+  })
 end
 
 -- A comfortable, mouse-friendly editing baseline.
