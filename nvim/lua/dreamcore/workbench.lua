@@ -168,33 +168,44 @@ function M.hop_files()
   end
 end
 
+-- Version of this config, from git tags (vX.Y.Z). Between releases git describe says
+-- e.g. "v2.0.0-3-gabc1234" (3 commits after v2.0.0); show that as "v2.0.0+3 (abc1234)".
+function M.version()
+  local dir = vim.fn.stdpath('config')
+  local out = vim.trim(vim.system({ 'git', '-C', dir, 'describe', '--tags', '--always' }, { text = true }):wait().stdout or '')
+  local tag, ahead, sha = out:match('^(.-)%-(%d+)%-g(%x+)$')
+  if tag then return ('%s+%s (%s)'):format(tag, ahead, sha) end
+  return out ~= '' and out or 'unknown'
+end
+
 function M.upgrade()
   local dir = vim.fn.stdpath('config')
-  local function head()
-    return vim.trim(vim.system({ 'git', '-C', dir, 'rev-parse', '--short', 'HEAD' }, { text = true }):wait().stdout or '')
-  end
-  local before = head()
-  vim.notify('Checking for updates…')
-  vim.system({ 'git', '-C', dir, 'pull', '--ff-only' }, { text = true }, function(res)
+  local before = M.version()
+  vim.notify('Checking for updates… (current version ' .. before .. ')')
+  -- --tags so new version tags come down too, even ones not on the pulled commits.
+  vim.system({ 'git', '-C', dir, 'pull', '--ff-only', '--tags' }, { text = true }, function(res)
     vim.schedule(function()
       if res.code ~= 0 then
-        vim.notify('Upgrade failed:\n' .. vim.trim((res.stdout or '') .. (res.stderr or '')), vim.log.levels.ERROR)
+        vim.notify('Update failed:\n' .. vim.trim((res.stdout or '') .. (res.stderr or '')), vim.log.levels.ERROR)
         return
       end
-      local after = head()
+      local after = M.version()
       if after == before then
-        vim.notify('Already on the latest version (' .. after .. ').')
+        vim.notify('Already on the latest version: ' .. after .. '.')
       else
-        vim.notify('Updated to the latest version (' .. before .. ' → ' .. after .. '). Restart Neovim to apply.')
+        vim.notify('Updated ' .. before .. ' → ' .. after .. '. Restart Neovim to apply.')
       end
     end)
   end)
 end
 
+
 function M.setup()
   vim.api.nvim_create_user_command('Run', M.run, {})
   vim.api.nvim_create_user_command('Build', M.build, { desc = 'Build the CMake project (errors → quickfix)' })
-  vim.api.nvim_create_user_command('Upgrade', M.upgrade, { desc = 'Pull latest config from GitHub' })
+  -- :Update (capital U; lowercase :update is Vim's own "save if changed"). :Upgrade still works.
+  vim.api.nvim_create_user_command('Update', M.upgrade, { desc = 'Pull latest config from GitHub, show version' })
+  vim.api.nvim_create_user_command('Upgrade', M.upgrade, { desc = 'Pull latest config from GitHub, show version' })
   vim.cmd([[cnoreabbrev <expr> upgrade getcmdtype() == ':' && getcmdline() ==# 'upgrade' ? 'Upgrade' : 'upgrade']])
   vim.cmd([[cnoreabbrev <expr> build getcmdtype() == ':' && getcmdline() ==# 'build' ? 'Build' : 'build']])
   vim.keymap.set({ 'n', 'i', 't' }, '<F2>', M.toggle_files, { desc = 'Toggle files' })
