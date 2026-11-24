@@ -16,6 +16,9 @@ return {
         vim.g.vimtex_view_method = "skim"
         vim.g.vimtex_view_skim_sync = 1      -- jump the PDF to the cursor after each compile
         vim.g.vimtex_view_skim_activate = 0  -- keep focus in the terminal
+        -- In Ghostty/kitty the PDF shows in a split inside Neovim instead (dreamcore/latex.lua),
+        -- so don't also pop Skim open after each compile. <space>lv still opens Skim.
+        if require("dreamcore.latex").inline_supported() then vim.g.vimtex_view_automatic = 0 end
       else
         vim.g.vimtex_view_method = "general"
         vim.g.vimtex_view_general_viewer = "open"
