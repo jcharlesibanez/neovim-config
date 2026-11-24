@@ -81,7 +81,7 @@ end
 
 local function set_winbar()
   if not preview_open() then return end
-  vim.wo[preview.win].winbar = ('%%#LofiBadge# page %d/%d   Ctrl-j / Ctrl-k to flip%%*'):format(preview.page, preview.pages)
+  vim.wo[preview.win].winbar = ('%%#BadgeDim# page %d/%d   Ctrl-j / Ctrl-k to flip%%*'):format(preview.page, preview.pages)
 end
 
 -- Open the split on the right without moving the cursor out of the .tex file.
