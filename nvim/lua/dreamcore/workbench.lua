@@ -168,14 +168,21 @@ function M.hop_files()
   end
 end
 
--- Version of this config, from git tags (vX.Y.Z). Between releases git describe says
--- e.g. "v2.0.0-3-gabc1234" (3 commits after v2.0.0); show that as "v2.0.0+3 (abc1234)".
+-- Each major version has a name: v2.2.2 is "v2.2.2 Delta". Add new majors here.
+M.codenames = { [2] = 'Delta' }
+
+-- Version of this config, from git tags (vX.Y.Z) plus the major's name. Between releases
+-- git describe says e.g. "v2.0.0-3-gabc1234" (3 commits after v2.0.0); show that as
+-- "v2.0.0+3 Delta (abc1234)".
 function M.version()
   local dir = vim.fn.stdpath('config')
   local out = vim.trim(vim.system({ 'git', '-C', dir, 'describe', '--tags', '--always' }, { text = true }):wait().stdout or '')
+  if out == '' then return 'unknown' end
   local tag, ahead, sha = out:match('^(.-)%-(%d+)%-g(%x+)$')
-  if tag then return ('%s+%s (%s)'):format(tag, ahead, sha) end
-  return out ~= '' and out or 'unknown'
+  local name = M.codenames[tonumber((tag or out):match('^v(%d+)%.'))]
+  name = name and (' ' .. name) or ''
+  if tag then return ('%s+%s%s (%s)'):format(tag, ahead, name, sha) end
+  return out .. name
 end
 
 function M.upgrade()
