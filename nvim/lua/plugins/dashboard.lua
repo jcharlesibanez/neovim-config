@@ -46,6 +46,11 @@ return {
       },
     },
     scope = { enabled = true },
+    -- Smooth scrolling for Ctrl-d/u, Ctrl-f/b, gg/G, search jumps, mouse wheel. :SmoothScroll toggles it.
+    scroll = {
+      enabled = true,
+      animate = { duration = { step = 10, total = 180 }, easing = "outQuad" },
+    },
     words = { enabled = true },
     dashboard = { enabled = false },
     styles = {
@@ -53,4 +58,10 @@ return {
       input = { border = "single", relative = "cursor", row = -3, col = 0 },
     },
   },
+  init = function()
+    vim.api.nvim_create_user_command("SmoothScroll", function()
+      vim.g.snacks_scroll = vim.g.snacks_scroll == false
+      vim.notify("Smooth scroll " .. (vim.g.snacks_scroll and "on" or "off"))
+    end, { desc = "Toggle smooth scrolling" })
+  end,
 }
