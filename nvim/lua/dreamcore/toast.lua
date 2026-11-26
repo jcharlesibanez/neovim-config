@@ -1,8 +1,8 @@
 -- Small italic messages in the bottom right that fade in, stay a moment, then fade out.
--- No box around them. They stack above whatever badge is already in the bottom right
--- (the :Music now-playing badge is always lowest); otherwise they start on the bottom line.
--- Above that, notes go in a fixed order from the bottom up by `order` (lower = lower down):
--- study mode (10), anything else (50), :Update (100, always highest).
+-- No box around them. They go in a fixed order from the bottom up by `order` (lower =
+-- lower down): the :Music badge (0, always lowest), study mode (10), anything else (50),
+-- :Update (100, always highest). When one goes away, the ones above move down.
+-- Any other non-toast badge in the bottom-right corner is stepped over.
 --
 --   require('dreamcore.toast').show('Study mode active', { color = '#ff1a3a' })
 --   show(text, { id = 'x', timeout = false })  -- stays until shown again with the same id
@@ -142,9 +142,15 @@ function M.show(text, opts)
     -- Same id: change it in place and keep it fully visible (no fade back in).
     t.text, t.color, t.timeout = text, opts.color or DEFAULT_COLOR, timeout or nil
     t.order = opts.order or t.order
-    -- Keep it fully visible; if it was already fading out, bring it straight back.
-    t.phase, t.t = 'hold', 0
-    paint(t, 1)
+    -- Change the text in place. Still fading in: keep fading in. Fading out: fade back in
+    -- from how bright it is right now. Fully shown: stay shown, restart its timer.
+    if t.phase == 'out' then
+      local left = math.max(0, 1 - t.t / FADE_OUT)
+      t.phase, t.t = 'in', math.floor(FADE_IN * left * left)
+    elseif t.phase == 'hold' then
+      t.t = 0
+      paint(t, 1)
+    end
   else
     seq = seq + 1
     t = { id = opts.id, text = text, color = opts.color or DEFAULT_COLOR, timeout = timeout or nil,
@@ -157,6 +163,23 @@ function M.show(text, opts)
     timer = assert(vim.uv.new_timer())
     timer:start(TICK, TICK, vim.schedule_wrap(tick))
   end
+end
+
+-- Fade out the toast with this id now (e.g. the music badge on :Music off).
+function M.hide(id)
+  for _, t in ipairs(toasts) do
+    if t.id == id and t.phase ~= 'out' then
+      -- Fading in: start fading out from however bright it already is.
+      t.t = t.phase == 'in' and math.floor(FADE_OUT * (1 - math.sqrt(math.min(1, t.t / FADE_IN)))) or 0
+      t.phase = 'out'
+    end
+  end
+end
+
+-- Is a toast with this id on screen (and not fading away)?
+function M.visible(id)
+  for _, t in ipairs(toasts) do if t.id == id and t.phase ~= 'out' then return true end end
+  return false
 end
 
 function M.setup()

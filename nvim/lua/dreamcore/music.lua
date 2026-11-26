@@ -14,7 +14,7 @@ local POLL_MS = 2000
 
 local active = false -- :Music is on: poll Spotify and show the badge
 local starting = false -- Spotify is launching: keep the "starting" badge up meanwhile
-local badge_win, poll_timer, last_text
+local poll_timer
 
 -- ── Spotify ────────────────────────────────────────────────────────────────
 
@@ -36,39 +36,19 @@ end
 
 -- ── Badge ──────────────────────────────────────────────────────────────────
 
+-- The badge is a toast (dreamcore.toast) like study mode and :Update, so it fades in and
+-- out the same way. Order 0 keeps it lowest; the others stack above it.
 local function close_badge()
-  if badge_win and vim.api.nvim_win_is_valid(badge_win) then vim.api.nvim_win_close(badge_win, true) end
-  badge_win, last_text = nil, nil
-  require('dreamcore.toast').reflow() -- toasts drop back down to the bottom line
+  require('dreamcore.toast').hide('music')
 end
 
 local function draw_badge(what, icon)
-  local text = ' ' .. (icon or ICON) .. ' ' .. what .. ' '
-  if vim.fn.strdisplaywidth(text) > MAX_WIDTH then
-    while vim.fn.strdisplaywidth(text) > MAX_WIDTH - 2 do text = vim.fn.strcharpart(text, 0, vim.fn.strchars(text) - 1) end
-    text = text .. '… '
+  local text = (icon or ICON) .. ' ' .. what
+  if vim.fn.strdisplaywidth(text) > MAX_WIDTH - 2 then
+    while vim.fn.strdisplaywidth(text) > MAX_WIDTH - 4 do text = vim.fn.strcharpart(text, 0, vim.fn.strchars(text) - 1) end
+    text = text .. '…'
   end
-  local width = vim.fn.strdisplaywidth(text)
-  local cfg = {
-    relative = 'editor',
-    -- Bottom right, on the last editor line: above the statusline and command line.
-    row = math.max(0, vim.o.lines - vim.o.cmdheight - (vim.o.laststatus > 0 and 1 or 0) - 1),
-    col = math.max(0, vim.o.columns - width - 1),
-    width = width, height = 1, style = 'minimal', focusable = false, zindex = 150,
-  }
-  if badge_win and vim.api.nvim_win_is_valid(badge_win) then
-    if text ~= last_text then vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(badge_win), 0, -1, false, { text }) end
-    vim.api.nvim_win_set_config(badge_win, cfg)
-  else
-    local buf = vim.api.nvim_create_buf(false, true)
-    vim.bo[buf].bufhidden = 'wipe'
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { text })
-    cfg.noautocmd = true
-    badge_win = vim.api.nvim_open_win(buf, false, cfg)
-    vim.wo[badge_win].winhl = 'Normal:BadgeDim,NormalFloat:BadgeDim'
-  end
-  last_text = text
-  require('dreamcore.toast').reflow() -- keep toasts stacked above the badge
+  require('dreamcore.toast').show(text, { id = 'music', color = '#8b949e', order = 0, timeout = false })
 end
 
 -- Ask Spotify what's playing (without launching it) and update the badge.
