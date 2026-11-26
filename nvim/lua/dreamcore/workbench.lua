@@ -2,6 +2,13 @@ local M = {}
 local terminal
 local function shell(parts) return table.concat(vim.tbl_map(vim.fn.shellescape, parts), ' ') end
 
+-- How to install something on this system: Homebrew/Xcode on macOS, apt on Ubuntu/Debian.
+local function install_hint(mac_cmd, apt_pkg)
+  if vim.fn.has('mac') == 1 then return mac_cmd end
+  if vim.fn.executable('apt-get') == 1 then return 'sudo apt install ' .. apt_pkg end
+  return 'install ' .. apt_pkg .. ' with your package manager'
+end
+
 function M.python(file)
   local root = vim.fs.root(file, { '.venv', 'venv', 'pyproject.toml', 'requirements.txt', '.git' })
   for _, dir in ipairs({ '.venv', 'venv' }) do
@@ -16,12 +23,12 @@ end
 function M.command(file, ft)
   if ft == 'python' then
     local python = M.python(file)
-    if python == '' then return nil, 'Install Python 3 to run this file.' end
+    if python == '' then return nil, 'Install Python 3 to run this file: ' .. install_hint('brew install python', 'python3') end
     return shell({ python, '-u', file })
   elseif ft == 'cpp' or ft == 'c' then
     local compiler = vim.fn.exepath(ft == 'cpp' and 'clang++' or 'clang')
     if compiler == '' then compiler = vim.fn.exepath(ft == 'cpp' and 'g++' or 'gcc') end
-    if compiler == '' then return nil, 'Install a C/C++ compiler first.' end
+    if compiler == '' then return nil, 'Install a C/C++ compiler first: ' .. install_hint('xcode-select --install', 'build-essential') end
     local output = vim.fn.tempname()
     return shell({ compiler, ft == 'cpp' and '-std=c++20' or '-std=c17', '-Wall', '-Wextra', '-g', file, '-o', output })
       .. ' && ' .. vim.fn.shellescape(output) .. '; result=$?; rm -f ' .. vim.fn.shellescape(output) .. '; exit $result'
@@ -119,7 +126,7 @@ local function cmake(run)
   local file = vim.api.nvim_buf_get_name(0)
   local root = cmake_root(file ~= '' and file or vim.fn.getcwd() .. '/x')
   if not root then vim.notify('No CMakeLists.txt found above this file.', vim.log.levels.WARN); return false end
-  if vim.fn.executable('cmake') == 0 then vim.notify('Install CMake first: brew install cmake', vim.log.levels.WARN); return true end
+  if vim.fn.executable('cmake') == 0 then vim.notify('Install CMake first: ' .. install_hint('brew install cmake', 'cmake'), vim.log.levels.WARN); return true end
   local cmd, err = cmake_command(root, run)
   if not cmd then vim.notify(err, vim.log.levels.WARN); return true end
   vim.cmd('silent! wall')
