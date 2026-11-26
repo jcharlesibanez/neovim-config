@@ -82,24 +82,74 @@ return {
         -- black strip. The bold white line number marks the current line instead.
         vim.api.nvim_set_hl(0, 'CursorLine', { bg = 'NONE' })
 
-        -- Keywords in calm blue instead of the neon-red accent.
-        local KEYWORD = '#6cb6ff'
-        for _, g in ipairs({
-          'Keyword', 'Statement', 'Conditional', 'Repeat', 'Include', 'Exception', 'StorageClass',
-          '@keyword', '@keyword.function', '@keyword.return', '@keyword.conditional',
-          '@keyword.conditional.ternary', '@keyword.repeat', '@keyword.import', '@keyword.operator',
-          '@keyword.exception', '@keyword.modifier', '@keyword.type', '@keyword.coroutine',
-          '@keyword.directive', '@keyword.directive.define', '@lsp.type.keyword',
-        }) do
-          vim.api.nvim_set_hl(0, g, { fg = KEYWORD })
+        -- ── Code colors: red-centered ──────────────────────────────────────
+        -- Built around the neon red of the borders. Reds and pinks are told apart by
+        -- brightness, not just hue: keywords are the full neon red, names are near-white,
+        -- and the quieter parts (operators, punctuation, comments) fade toward grey.
+        -- No yellow or orange. Diagnostics and git signs keep their own colors.
+        local C = {
+          keyword  = RED,       -- if, return, class, const, #include
+          func     = '#ffe4e8', -- function names: near-white with a red tint
+          type     = '#ff7a8c', -- types / classes: light red (same as explorer names)
+          builtin  = '#ff5c74', -- this, self, std types, true/false/nullptr
+          string   = '#f0a3ae', -- strings: soft rose
+          escape   = '#ffffff', -- \n, %d inside strings
+          number   = '#ff4f8b', -- numbers / constants: raspberry
+          param    = '#ffc2cb', -- parameters: pale pink, italic
+          property = '#d9b3b9', -- fields / members: muted pink-grey
+          variable = '#ead8dc', -- plain names: the normal text color
+          module   = '#ff9aa8', -- namespaces / modules
+          macro    = '#ff3d5c', -- macros, preprocessor
+          operator = '#b8848c', -- = + && -> : rose-grey
+          punct    = '#8a6168', -- ( ) { } , ; dim red-grey
+          comment  = '#6b7280', -- grey italic so it stays readable
+        }
+        local groups = {
+          keyword  = { 'Keyword', 'Statement', 'Conditional', 'Repeat', 'Include', 'Exception', 'StorageClass',
+                       'Label', '@keyword', '@keyword.function', '@keyword.return', '@keyword.conditional',
+                       '@keyword.conditional.ternary', '@keyword.repeat', '@keyword.import', '@keyword.operator',
+                       '@keyword.exception', '@keyword.modifier', '@keyword.type', '@keyword.coroutine',
+                       '@keyword.directive', '@keyword.directive.define', '@lsp.type.keyword', '@tag',
+                       '@markup.heading', 'Title' },
+          func     = { 'Function', '@function', '@function.call', '@function.method', '@function.method.call',
+                       '@constructor', '@lsp.type.function', '@lsp.type.method' },
+          type     = { 'Type', 'Structure', 'Typedef', '@type', '@type.definition', '@lsp.type.class',
+                       '@lsp.type.struct', '@lsp.type.enum', '@lsp.type.type', '@lsp.type.interface',
+                       '@lsp.type.typeParameter' },
+          builtin  = { '@variable.builtin', '@constant.builtin', '@function.builtin', '@type.builtin',
+                       '@module.builtin', 'Boolean', '@boolean' },
+          string   = { 'String', 'Character', '@string', '@character', '@string.documentation', '@markup.raw' },
+          escape   = { '@string.escape', '@string.special', 'SpecialChar', '@character.special' },
+          number   = { 'Number', 'Float', 'Constant', '@number', '@number.float', '@constant',
+                       '@lsp.type.enumMember' },
+          param    = { '@variable.parameter', '@lsp.type.parameter' },
+          property = { '@property', '@variable.member', '@lsp.type.property', '@tag.attribute' },
+          variable = { 'Identifier', '@variable', '@lsp.type.variable' },
+          module   = { '@module', '@lsp.type.namespace', '@markup.link' },
+          macro    = { 'PreProc', 'Define', 'Macro', 'PreCondit', '@function.macro', '@constant.macro',
+                       '@lsp.type.macro', '@attribute' },
+          operator = { 'Operator', '@operator' },
+          punct    = { 'Delimiter', '@punctuation', '@punctuation.bracket', '@punctuation.delimiter',
+                       '@punctuation.special', '@tag.delimiter' },
+        }
+        local mine = {}
+        for role, names in pairs(groups) do
+          local spec = { fg = C[role] }
+          if role == 'param' then spec.italic = true end
+          for _, g in ipairs(names) do vim.api.nvim_set_hl(0, g, spec); mine[g] = true end
         end
-        -- Builtins (self, this, nullptr, true…) in ice blue, not error red.
-        for _, g in ipairs({ '@variable.builtin', '@constant.builtin', '@function.builtin',
-                             '@type.builtin', '@module.builtin', 'Boolean' }) do
-          vim.api.nvim_set_hl(0, g, { fg = '#b5e3ff' })
+        -- The theme also colors language-specific variants (e.g. @keyword.import.cpp in teal),
+        -- which win over the base group. Point each of those back at the base color above.
+        for name in pairs(vim.api.nvim_get_hl(0, {})) do
+          if not mine[name] and name:sub(1, 1) == '@' then
+            local base = name
+            repeat base = base:match('^(.*)%.[^.]+$') until not base or mine[base]
+            if base then vim.api.nvim_set_hl(0, name, { link = base }) end
+          end
         end
-        vim.api.nvim_set_hl(0, 'Comment',  { fg = '#6b7280', italic = true })
+        vim.api.nvim_set_hl(0, 'Comment',  { fg = C.comment, italic = true })
         vim.api.nvim_set_hl(0, '@comment', { link = 'Comment' })
+        vim.api.nvim_set_hl(0, '@string.documentation.python', { fg = C.comment, italic = true })
       end
 
       apply_borders()
