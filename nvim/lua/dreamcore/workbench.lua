@@ -188,19 +188,24 @@ end
 function M.upgrade()
   local dir = vim.fn.stdpath('config')
   local before = M.version()
-  vim.notify('Checking for updates… (current version ' .. before .. ')')
+  -- One popup the whole way: "Checking…" stays up until the pull finishes, then that same
+  -- popup is replaced with the result (same notifier id), instead of a second popup.
+  local function say(msg, level, timeout)
+    vim.notify(msg, level or vim.log.levels.INFO, { id = 'config_update', title = 'Update', timeout = timeout })
+  end
+  say('Checking for updates… (current version ' .. before .. ')', nil, false)
   -- --tags so new version tags come down too, even ones not on the pulled commits.
   vim.system({ 'git', '-C', dir, 'pull', '--ff-only', '--tags' }, { text = true }, function(res)
     vim.schedule(function()
       if res.code ~= 0 then
-        vim.notify('Update failed:\n' .. vim.trim((res.stdout or '') .. (res.stderr or '')), vim.log.levels.ERROR)
+        say('Update failed:\n' .. vim.trim((res.stdout or '') .. (res.stderr or '')), vim.log.levels.ERROR)
         return
       end
       local after = M.version()
       if after == before then
-        vim.notify('Already on the latest version: ' .. after .. '.')
+        say('Already on the latest version: ' .. after .. '.')
       else
-        vim.notify('Updated ' .. before .. ' → ' .. after .. '. Restart Neovim to apply.')
+        say('Updated ' .. before .. ' → ' .. after .. '. Restart Neovim to apply.')
       end
     end)
   end)
@@ -210,10 +215,13 @@ end
 function M.setup()
   vim.api.nvim_create_user_command('Run', M.run, {})
   vim.api.nvim_create_user_command('Build', M.build, { desc = 'Build the CMake project (errors → quickfix)' })
-  -- :Update (capital U; lowercase :update is Vim's own "save if changed"). :Upgrade still works.
+  -- :Update / :update / :Upgrade / :upgrade all pull the latest config. Typing `:update`
+  -- normally runs Vim's own "save if changed"; typed alone it now means :Update instead
+  -- (scripts and autosave calling `update` still save; `:up` still saves too).
   vim.api.nvim_create_user_command('Update', M.upgrade, { desc = 'Pull latest config from GitHub, show version' })
   vim.api.nvim_create_user_command('Upgrade', M.upgrade, { desc = 'Pull latest config from GitHub, show version' })
   vim.cmd([[cnoreabbrev <expr> upgrade getcmdtype() == ':' && getcmdline() ==# 'upgrade' ? 'Upgrade' : 'upgrade']])
+  vim.cmd([[cnoreabbrev <expr> update getcmdtype() == ':' && getcmdline() ==# 'update' ? 'Update' : 'update']])
   vim.cmd([[cnoreabbrev <expr> build getcmdtype() == ':' && getcmdline() ==# 'build' ? 'Build' : 'build']])
   vim.keymap.set({ 'n', 'i', 't' }, '<F2>', M.toggle_files, { desc = 'Toggle files' })
   vim.keymap.set('n', '<leader>e', M.toggle_files, { desc = 'Toggle files' })
