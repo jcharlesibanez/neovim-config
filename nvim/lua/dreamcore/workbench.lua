@@ -188,24 +188,25 @@ end
 function M.upgrade()
   local dir = vim.fn.stdpath('config')
   local before = M.version()
-  -- One popup the whole way: "Checking…" stays up until the pull finishes, then that same
-  -- popup is replaced with the result (same notifier id), instead of a second popup.
-  local function say(msg, level, timeout)
-    vim.notify(msg, level or vim.log.levels.INFO, { id = 'config_update', title = 'Update', timeout = timeout })
+  -- One white italic note in the bottom right the whole way: "Checking…" stays up until the
+  -- pull finishes, then changes in place to the result and fades out.
+  local function say(msg, timeout)
+    require('dreamcore.toast').show(msg, { id = 'config_update', color = '#ffffff', timeout = timeout })
   end
-  say('Checking for updates… (current version ' .. before .. ')', nil, false)
+  say('Checking for updates… (current version ' .. before .. ')', false)
   -- --tags so new version tags come down too, even ones not on the pulled commits.
   vim.system({ 'git', '-C', dir, 'pull', '--ff-only', '--tags' }, { text = true }, function(res)
     vim.schedule(function()
       if res.code ~= 0 then
-        say('Update failed:\n' .. vim.trim((res.stdout or '') .. (res.stderr or '')), vim.log.levels.ERROR)
+        local err = vim.trim((res.stderr or '') .. '\n' .. (res.stdout or ''))
+        say('Update failed: ' .. (err:match('[^\n]+') or 'git pull failed'), 6000)
         return
       end
       local after = M.version()
       if after == before then
-        say('Already on the latest version: ' .. after .. '.')
+        say('Already on the latest version: ' .. after .. '.', 3000)
       else
-        say('Updated ' .. before .. ' → ' .. after .. '. Restart Neovim to apply.')
+        say('Updated ' .. before .. ' → ' .. after .. '. Restart Neovim to apply.', 5000)
       end
     end)
   end)

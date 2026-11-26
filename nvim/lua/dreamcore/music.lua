@@ -39,6 +39,7 @@ end
 local function close_badge()
   if badge_win and vim.api.nvim_win_is_valid(badge_win) then vim.api.nvim_win_close(badge_win, true) end
   badge_win, last_text = nil, nil
+  require('dreamcore.toast').reflow() -- toasts drop back down to the bottom line
 end
 
 local function draw_badge(what, icon)
@@ -67,6 +68,7 @@ local function draw_badge(what, icon)
     vim.wo[badge_win].winhl = 'Normal:BadgeDim,NormalFloat:BadgeDim'
   end
   last_text = text
+  require('dreamcore.toast').reflow() -- keep toasts stacked above the badge
 end
 
 -- Ask Spotify what's playing (without launching it) and update the badge.

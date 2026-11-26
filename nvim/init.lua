@@ -131,10 +131,6 @@ local function agent_hide_indicator()
     vim.api.nvim_win_close(agent_win, true)
   end
   agent_win = nil
-  if vim.g.agent_badge_visible then
-    vim.g.agent_badge_visible = false
-    require('dreamcore.studymode').reposition()
-  end
 end
 
 local function agent_show_indicator()
@@ -155,8 +151,6 @@ local function agent_show_indicator()
     zindex    = 200,
   })
   vim.api.nvim_set_option_value('winhl', 'NormalFloat:AgentIndicator,FloatBorder:AgentIndicatorBorder', { win = agent_win })
-  vim.g.agent_badge_visible = true
-  require('dreamcore.studymode').reposition()
 end
 
 local function toggle_agent()
@@ -268,6 +262,7 @@ vim.api.nvim_create_autocmd("TextYankPost", {
 require("dreamcore.webdev").setup()
 require("dreamcore.workbench").setup()
 require("dreamcore.folds").setup()
+require("dreamcore.toast").setup()
 require("dreamcore.studymode").setup()
 require("dreamcore.deletepreview").setup()
 require("dreamcore.asmr").setup()
