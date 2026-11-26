@@ -1,6 +1,8 @@
 -- Small italic messages in the bottom right that fade in, stay a moment, then fade out.
 -- No box around them. They stack above whatever badge is already in the bottom right
--- (e.g. the :Music now-playing badge); otherwise they sit on the bottom line.
+-- (the :Music now-playing badge is always lowest); otherwise they start on the bottom line.
+-- Above that, notes go in a fixed order from the bottom up by `order` (lower = lower down):
+-- study mode (10), anything else (50), :Update (100, always highest).
 --
 --   require('dreamcore.toast').show('Study mode active', { color = '#ff1a3a' })
 --   show(text, { id = 'x', timeout = false })  -- stays until shown again with the same id
@@ -12,7 +14,7 @@ local FADE_IN, FADE_OUT, TICK = 160, 700, 30 -- ms
 local DEFAULT_TIMEOUT = 2500                    -- ms the toast stays fully visible
 local DEFAULT_COLOR = '#ffffff'
 
-local toasts = {} -- newest last; each {id, text, color, timeout, phase, t, win, buf, hl}
+local toasts = {} -- each {id, text, color, timeout, order, seq, phase, t, win, buf, hl}
 local timer
 local seq = 0
 
@@ -72,8 +74,13 @@ end
 
 function M.reflow()
   local row = base_row()
-  for i = #toasts, 1, -1 do -- newest at the bottom, older ones above it
-    local t = toasts[i]
+  -- Lowest order at the bottom; with the same order, the newest is lower.
+  local sorted = vim.list_extend({}, toasts)
+  table.sort(sorted, function(a, b)
+    if a.order ~= b.order then return a.order < b.order end
+    return a.seq > b.seq
+  end)
+  for _, t in ipairs(sorted) do
     local text = text_of(t)
     local width = vim.fn.strdisplaywidth(text)
     local cfg = {
@@ -124,7 +131,7 @@ local function tick()
 end
 
 ---@param text string
----@param opts? {id?:string, color?:string, timeout?:integer|false}
+---@param opts? {id?:string, color?:string, timeout?:integer|false, order?:integer}
 function M.show(text, opts)
   opts = opts or {}
   local timeout = opts.timeout
@@ -134,12 +141,14 @@ function M.show(text, opts)
   if t then
     -- Same id: change it in place and keep it fully visible (no fade back in).
     t.text, t.color, t.timeout = text, opts.color or DEFAULT_COLOR, timeout or nil
+    t.order = opts.order or t.order
+    -- Keep it fully visible; if it was already fading out, bring it straight back.
     t.phase, t.t = 'hold', 0
     paint(t, 1)
   else
     seq = seq + 1
     t = { id = opts.id, text = text, color = opts.color or DEFAULT_COLOR, timeout = timeout or nil,
-          phase = 'in', t = 0, hl = 'DreamToast' .. seq }
+          order = opts.order or 50, seq = seq, phase = 'in', t = 0, hl = 'DreamToast' .. seq }
     table.insert(toasts, t)
     paint(t, 0)
   end

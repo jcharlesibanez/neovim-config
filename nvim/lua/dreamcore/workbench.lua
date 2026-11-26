@@ -191,7 +191,7 @@ function M.upgrade()
   -- One white italic note in the bottom right the whole way: "Checking…" stays up until the
   -- pull finishes, then changes in place to the result and fades out.
   local function say(msg, timeout)
-    require('dreamcore.toast').show(msg, { id = 'config_update', color = '#ffffff', timeout = timeout })
+    require('dreamcore.toast').show(msg, { id = 'config_update', color = '#ffffff', timeout = timeout, order = 100 })
   end
   say('Checking for updates… (current version ' .. before .. ')', false)
   -- --tags so new version tags come down too, even ones not on the pulled commits.
