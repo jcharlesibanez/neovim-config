@@ -3,6 +3,7 @@
 --   working   → the crab dances (shuffles side to side, switching which claw is up)
 --   idle      → it stands still
 --   attention → it stands still with a red "!" next to it, blinking: Claude needs your approval
+--   unread    → same "!": Claude finished while the panel was minimized and you haven't looked yet
 -- Claude Code reports these through hooks (see M.hook_settings), which call dream_agent_state().
 local M = {}
 
@@ -48,7 +49,7 @@ local function render()
   if not (win and vim.api.nvim_win_is_valid(win)) then return end
   local pose, off = LEFT, 1
   if M.state == 'working' then pose, off = unpack(DANCE[math.floor(tick / 2) % #DANCE + 1]) end
-  local bang = M.state == 'attention'
+  local bang = M.state == 'attention' or M.state == 'unread'
   local bang_on = bang and math.floor(tick / 5) % 2 == 0
   local lines, marks = {}, {}
   for i, row in ipairs(pose) do
@@ -79,7 +80,7 @@ local function render()
 end
 
 local function animate()
-  local moving = win and (M.state == 'working' or M.state == 'attention')
+  local moving = win and (M.state ~= 'idle')
   if moving and not timer then
     timer = assert(vim.uv.new_timer())
     timer:start(110, 110, vim.schedule_wrap(function() tick = tick + 1; render() end))
@@ -108,9 +109,16 @@ function M.hide()
 end
 
 function M.set_state(state)
+  -- Claude finished: if the panel is minimized (badge showing), that's a reply you haven't read.
+  if state == 'done' then state = (win and vim.api.nvim_win_is_valid(win)) and 'unread' or 'idle' end
   M.state = state
   render()
   animate()
+end
+
+-- You opened the panel: its reply is read. (An approval still waiting keeps its "!".)
+function M.seen()
+  if M.state == 'unread' then M.set_state('idle') end
 end
 
 -- Called by Claude Code's hooks through `nvim --server $NVIM --remote-expr`.
@@ -133,7 +141,7 @@ function M.hook_settings()
     UserPromptSubmit = hook('working'),
     PostToolUse = hook('working', '*'),            -- you approved and the tool ran: back to work
     Notification = hook('attention', 'permission_prompt'),
-    Stop = hook('idle'),
+    Stop = hook('done'),
   } })
 end
 

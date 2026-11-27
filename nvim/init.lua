@@ -245,6 +245,7 @@ local function toggle_agent()
     agent_state = 'minimized'
   else                         -- minimized
     agent_hide_indicator()
+    require('dreamcore.agentbadge').seen()
     agent_term:toggle()        -- reopens window
     agent_state = 'active'
     agent_locked = true
