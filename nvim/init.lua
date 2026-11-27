@@ -47,6 +47,50 @@ vim.opt.clipboard = "unnamedplus"
 vim.opt.fillchars = { eob = " ", vert = " ", horiz = " ", fold = "·", foldopen = "", foldclose = "" }
 vim.opt.guicursor = "n-v-c:block-Cursor/lCursor,i-ci-ve:ver25-CursorInsert,r-cr:hor20,o:hor50"
 
+-- Leftover swap files: skip the "E325: ATTENTION" screen when the swap file holds nothing
+-- worth recovering. They're left behind whenever Neovim is killed instead of quit (closing
+-- the terminal window, a crash). Neovim already handles a file open in another running Neovim.
+--   * swap has no unsaved changes          → delete it quietly
+--   * the file was saved after the swap    → its changes are older than the file: delete it,
+--                                            keeping a copy in ~/.local/state/nvim/swap-old
+--   * the swap is newer than the file      → real unsaved work from a crash: still ask
+local function newer(a, b) -- was file a modified strictly after file b?
+  local sa, sb = vim.uv.fs_stat(a), vim.uv.fs_stat(b)
+  if not (sa and sb) then return false end
+  local ta, tb = sa.mtime, sb.mtime
+  return ta.sec > tb.sec or (ta.sec == tb.sec and ta.nsec > tb.nsec)
+end
+vim.api.nvim_create_autocmd("SwapExists", {
+  group = vim.api.nvim_create_augroup("dream_swap", { clear = true }),
+  callback = function(ev)
+    if vim.v.swapchoice ~= "" then return end -- already decided (open in another Neovim)
+    local swap = vim.v.swapname
+    local info = vim.fn.swapinfo(swap)
+    if info.error then return end
+    local pid = tonumber(info.pid) or 0
+    if pid > 0 and vim.uv.kill(pid, 0) == 0 then return end -- its Neovim is still running: ask
+    local name = vim.fn.fnamemodify(ev.file, ":t")
+    local note
+    if info.dirty == 0 then
+      vim.v.swapchoice = "d"
+    elseif newer(ev.file, swap) then
+      local keep = vim.fn.stdpath("state") .. "/swap-old"
+      vim.fn.mkdir(keep, "p")
+      local copy = keep .. "/" .. vim.fn.fnamemodify(swap, ":t")
+      if not vim.uv.fs_copyfile(swap, copy) then return end -- couldn't keep a copy: ask
+      vim.v.swapchoice = "d"
+      note = ("Old unsaved changes to %s were older than the file; copy kept in swap-old"):format(name)
+    else
+      return
+    end
+    if note then
+      vim.schedule(function()
+        require("dreamcore.toast").show(note, { id = "swap", color = "#8b949e", timeout = 5000 })
+      end)
+    end
+  end,
+})
+
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not (vim.uv or vim.loop).fs_stat(lazypath) then
   vim.fn.system({
