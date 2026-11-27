@@ -1,6 +1,6 @@
 return {
   -- Your code crumbles and falls like sand (:rain) or plays the Game of Life (:life).
-  -- Any key stops it; the file isn't changed.
+  -- q, Esc or Enter stops it; the file isn't changed.
   {
     "Eandrju/cellular-automaton.nvim",
     cmd = "CellularAutomaton",
