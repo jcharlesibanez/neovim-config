@@ -192,6 +192,14 @@ function M.version()
   return out .. name
 end
 
+-- Files in the config repo you've edited but not committed (untracked files don't count).
+local function local_changes(dir)
+  local out = vim.system({ 'git', '-C', dir, 'status', '--porcelain', '--untracked-files=no' }, { text = true }):wait().stdout or ''
+  local files = {}
+  for line in out:gmatch('[^\n]+') do table.insert(files, vim.fn.fnamemodify(line:sub(4), ':t')) end
+  return files
+end
+
 function M.upgrade()
   local dir = vim.fn.stdpath('config')
   local before = M.version()
@@ -200,22 +208,46 @@ function M.upgrade()
   local function say(msg, timeout)
     require('dreamcore.toast').show(msg, { id = 'config_update', color = '#ffffff', timeout = timeout, order = 100 })
   end
-  say('Checking for updates… (current version ' .. before .. ')', false)
-  -- --tags so new version tags come down too, even ones not on the pulled commits.
-  vim.system({ 'git', '-C', dir, 'pull', '--ff-only', '--tags' }, { text = true }, function(res)
-    vim.schedule(function()
-      if res.code ~= 0 then
-        local err = vim.trim((res.stderr or '') .. '\n' .. (res.stdout or ''))
-        say('Update failed: ' .. (err:match('[^\n]+') or 'git pull failed'), 6000)
-        return
-      end
-      local after = M.version()
-      if after == before then
-        say('Already on the latest version: ' .. after .. '.', 3000)
-      else
-        say('Updated ' .. before .. ' → ' .. after .. '. Restart Neovim to apply.', 5000)
-      end
+
+  local function pull()
+    say('Checking for updates… (current version ' .. before .. ')', false)
+    -- --tags so new version tags come down too, even ones not on the pulled commits.
+    -- --autostash sets your uncommitted edits aside, updates, then puts them back on top.
+    vim.system({ 'git', '-C', dir, 'pull', '--ff-only', '--autostash', '--tags' }, { text = true }, function(res)
+      vim.schedule(function()
+        local out = (res.stderr or '') .. '\n' .. (res.stdout or '')
+        if res.code ~= 0 then
+          say('Update failed: ' .. (vim.trim(out):match('[^\n]+') or 'git pull failed'), 6000)
+          return
+        end
+        local kept = ''
+        if out:find('autostash resulted in conflicts') then
+          -- Your edits and the update changed the same lines. Don't leave conflict markers in
+          -- the config (Neovim wouldn't start): keep the updated files, your edits stay in the stash.
+          vim.system({ 'git', '-C', dir, 'reset', '-q', '--hard', 'HEAD' }):wait()
+          kept = ' Your edits clashed with it; they\'re saved in `git stash`.'
+        end
+        local after = M.version()
+        if after == before then
+          say('Already on the latest version: ' .. after .. '.' .. kept, kept == '' and 3000 or 10000)
+        else
+          say('Updated ' .. before .. ' → ' .. after .. '. Restart Neovim to apply.' .. kept, kept == '' and 5000 or 10000)
+        end
+      end)
     end)
+  end
+
+  local changed = local_changes(dir)
+  if #changed == 0 then return pull() end
+  local names = table.concat(vim.list_slice(changed, 1, 3), ', ') .. (#changed > 3 and ', …' or '')
+  vim.ui.input({
+    prompt = ('You have local changes to the config (%s). Update anyway and keep them? [Y/n] '):format(names),
+  }, function(answer)
+    if answer == nil or answer:lower():match('^%s*n') then
+      say('Update cancelled.', 2500)
+    else
+      pull()
+    end
   end)
 end
 
