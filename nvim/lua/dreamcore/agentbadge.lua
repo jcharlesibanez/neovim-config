@@ -10,7 +10,18 @@ local M = {}
 local ns = vim.api.nvim_create_namespace('agent_badge')
 local win, buf, timer
 local tick = 0
+local turn_start -- when Claude started on your last message (hrtime, ns); nil when it's done
 M.state = 'idle'
+
+-- Elapsed time the way Claude Code shows it: 12s, 1m 5s, 1h 2m 3s.
+local function elapsed()
+  local s = math.floor((vim.uv.hrtime() - turn_start) / 1e9)
+  local h, m = math.floor(s / 3600), math.floor(s % 3600 / 60)
+  s = s % 60
+  if h > 0 then return ('%dh %dm %ds'):format(h, m, s) end
+  if m > 0 then return ('%dm %ds'):format(m, s) end
+  return s .. 's'
+end
 
 -- Each row is { text, mask }: 'x' in the mask = that cell has the black background that
 -- turns the dark corners of ▛ into eyes.
@@ -67,13 +78,20 @@ local function render()
     end
     lines[i] = line
   end
+  -- While Claude is on your message (working, or waiting on an approval): how long so far.
+  if turn_start and (M.state == 'working' or M.state == 'attention') then
+    local text, width = elapsed(), vim.fn.strdisplaywidth(lines[1])
+    local left = math.floor((width - #text) / 2)
+    table.insert(lines, (' '):rep(left) .. text .. (' '):rep(width - left - #text))
+    table.insert(marks, { #lines - 1, left, left + #text, 'AgentTime' })
+  end
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   for _, mk in ipairs(marks) do
     vim.api.nvim_buf_set_extmark(buf, ns, mk[1], mk[2], { end_col = mk[3], hl_group = mk[4] })
   end
   local width = vim.fn.strdisplaywidth(lines[1])
-  if vim.api.nvim_win_get_width(win) ~= width then
+  if vim.api.nvim_win_get_width(win) ~= width or vim.api.nvim_win_get_height(win) ~= #lines then
     vim.api.nvim_win_set_config(win, { relative = 'editor', anchor = 'NE', row = 1, col = vim.o.columns - 1,
                                        width = width, height = #lines })
   end
@@ -109,6 +127,9 @@ function M.hide()
 end
 
 function M.set_state(state)
+  -- You sent a message: Claude starts working and the clock starts.
+  if state == 'start' then state, turn_start = 'working', vim.uv.hrtime() end
+  if state == 'done' or state == 'idle' then turn_start = nil end
   -- Claude finished: if the panel is minimized (badge showing), that's a reply you haven't read.
   if state == 'done' then state = (win and vim.api.nvim_win_is_valid(win)) and 'unread' or 'idle' end
   M.state = state
@@ -138,7 +159,7 @@ function M.hook_settings()
     return { { matcher = matcher, hooks = { { type = 'command', command = report(state) } } } }
   end
   return vim.json.encode({ hooks = {
-    UserPromptSubmit = hook('working'),
+    UserPromptSubmit = hook('start'),
     PostToolUse = hook('working', '*'),            -- you approved and the tool ran: back to work
     Notification = hook('attention', 'permission_prompt'),
     Stop = hook('done'),
