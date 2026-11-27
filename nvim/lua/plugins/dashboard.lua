@@ -8,6 +8,7 @@ return {
     input = { enabled = true },
     notifier = { enabled = true, timeout = 2600 },
     explorer = { enabled = true, replace_netrw = true, trash = true },
+    lazygit = { enabled = true }, -- <leader>gg / :lazygit — git in a floating window (q to close)
     picker = {
       enabled = true,
       ui_select = true,
@@ -63,5 +64,19 @@ return {
       vim.g.snacks_scroll = vim.g.snacks_scroll == false
       vim.notify("Smooth scroll " .. (vim.g.snacks_scroll and "on" or "off"))
     end, { desc = "Toggle smooth scrolling" })
+
+    -- lazygit: stage, commit, push, browse history. Needs the lazygit program.
+    local function lazygit()
+      if vim.fn.executable("lazygit") == 0 then
+        local how = vim.fn.has("mac") == 1 and "brew install lazygit"
+          or "sudo apt install lazygit (Ubuntu 25.04+), or see github.com/jesseduffield/lazygit"
+        vim.notify("lazygit isn't installed. Install it with: " .. how, vim.log.levels.WARN)
+        return
+      end
+      Snacks.lazygit()
+    end
+    vim.keymap.set("n", "<leader>gg", lazygit, { desc = "Lazygit" })
+    vim.api.nvim_create_user_command("Lazygit", lazygit, { desc = "Open lazygit" })
+    vim.cmd([[cnoreabbrev <expr> lazygit getcmdtype() == ':' && getcmdline() ==# 'lazygit' ? 'Lazygit' : 'lazygit']])
   end,
 }
