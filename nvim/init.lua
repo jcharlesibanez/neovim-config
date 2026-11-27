@@ -159,7 +159,7 @@ vim.keymap.set('n', '<leader>:', function() Snacks.picker.command_history() end,
 vim.keymap.set('n', '<leader>w', '<cmd>w<CR>', { desc = "Save File" })
 vim.keymap.set('n', '<leader>ww', '<cmd>w!<CR>', { desc = "Save File" })
 vim.keymap.set('n', '<leader>o', function() Snacks.explorer.reveal() end, { desc = "Reveal Current File"})
-vim.keymap.set('n', '<leader>qq', '<cmd>exit<CR>', { desc = "Exit Neovim"})
+vim.keymap.set('n', '<leader>qq', '<cmd>qa<CR>', { desc = "Quit all (stops if anything is unsaved)" })
 vim.keymap.set("n", "<leader>Q", function() Snacks.bufdelete() end, { desc = "Close Buffer" })
 vim.keymap.set("n", "<leader>un", function() Snacks.notifier.show_history() end, { desc = "Notification History" })
 vim.keymap.set('n', '<leader>t', '<cmd>ToggleTerm<CR>')
