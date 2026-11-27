@@ -65,7 +65,8 @@ return {
         -- Agent indicator badge
         vim.api.nvim_set_hl(0, 'AgentIndicator',       { fg = RED, bg = BG, bold = true })
         vim.api.nvim_set_hl(0, 'AgentIndicatorBorder', { fg = RED, bg = BG })
-        vim.api.nvim_set_hl(0, 'AgentLogo',            { fg = '#d97757', bg = BG, bold = true }) -- Claude's coral
+        vim.api.nvim_set_hl(0, 'AgentLogo',            { fg = '#d77757', bg = BG })        -- Claude Code's crab coral
+        vim.api.nvim_set_hl(0, 'AgentLogoEye',         { fg = '#d77757', bg = '#000000' }) -- crab cells with its black eyes
 
         -- Dim grey italic: :Music now-playing badge, LaTeX preview page bar.
         vim.api.nvim_set_hl(0, 'BadgeDim', { fg = '#8b949e', bg = BG, italic = true })

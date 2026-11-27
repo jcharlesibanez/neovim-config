@@ -180,19 +180,34 @@ end
 local function agent_show_indicator()
   agent_hide_indicator()
   local buf = vim.api.nvim_create_buf(false, true)
-  -- The Claude logo (✻) in Claude's coral, inside the red box.
-  local text = ' ✻ '
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { text })
-  vim.api.nvim_buf_set_extmark(buf, vim.api.nvim_create_namespace('agent_logo'), 0, 1,
-    { end_col = 1 + #'✻', hl_group = 'AgentLogo' })
+  -- The Claude Code crab, cell for cell as Claude Code 2.1 draws it: coral, with a black
+  -- background behind the middle cells (that's what turns the dark corners of ▛ into eyes).
+  local crab = {
+    { { ' ' }, { '▐' }, { '▛███▛█', 'AgentLogoEye' } },
+    { { '▝▜' }, { '█████', 'AgentLogoEye' }, { '█▀' } },
+    { { ' ▝▝   ▝▝' } },
+  }
+  local ns, lines, width = vim.api.nvim_create_namespace('agent_logo'), {}, 9
+  for _, row in ipairs(crab) do
+    local text = table.concat(vim.tbl_map(function(seg) return seg[1] end, row))
+    table.insert(lines, ' ' .. text .. (' '):rep(width - vim.fn.strdisplaywidth(text)) .. ' ')
+  end
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  for i, row in ipairs(crab) do
+    local byte = 1 -- after the leading space
+    for _, seg in ipairs(row) do
+      vim.api.nvim_buf_set_extmark(buf, ns, i - 1, byte, { end_col = byte + #seg[1], hl_group = seg[2] or 'AgentLogo' })
+      byte = byte + #seg[1]
+    end
+  end
   vim.bo[buf].bufhidden = 'wipe'
   agent_win = vim.api.nvim_open_win(buf, false, {
     relative  = 'editor',
     anchor    = 'NE',
     row       = 1,
     col       = vim.o.columns - 1,
-    width     = vim.fn.strdisplaywidth(text),
-    height    = 1,
+    width     = width + 2,
+    height    = #lines,
     style     = 'minimal',
     border    = 'single',
     focusable = false,
