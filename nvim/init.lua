@@ -163,9 +163,9 @@ vim.keymap.set('n', '<leader>qq', '<cmd>qa<CR>', { desc = "Quit all (stops if an
 vim.keymap.set("n", "<leader>Q", function() Snacks.bufdelete() end, { desc = "Close Buffer" })
 vim.keymap.set("n", "<leader>un", function() Snacks.notifier.show_history() end, { desc = "Notification History" })
 -- <leader>t always toggles your shell (terminal 1). A plain :ToggleTerm toggles whichever terminal
--- you're in, so pressed inside Claude Code it would try to toggle Claude instead.
+-- you're in. Space shortcuts are normal-mode only: while you type in a terminal (Claude Code,
+-- the shell) a space is just a space. Leave with Ctrl+1–9 / Ctrl+L, then use the shortcut.
 vim.keymap.set('n', '<leader>t', '<cmd>1ToggleTerm<CR>', { desc = 'Toggle terminal' })
-vim.keymap.set('t', '<leader>t', '<cmd>1ToggleTerm<CR>', { desc = 'Toggle terminal' })
 
 -- Claude Code agent panel  (off → active → minimized → active → …)
 local agent_term  = nil
@@ -222,7 +222,6 @@ local function toggle_agent()
         agent_state = 'off'
       end,
       on_open = function(t)
-        vim.keymap.set('t', '<leader>cc', toggle_agent, { buffer = t.bufnr })
         -- Ctrl+L hops on to the next window, as it does everywhere else.
         vim.keymap.set('t', '<C-l>', function() require('dreamcore.windows').next() end, { buffer = t.bufnr })
       end,
@@ -255,7 +254,7 @@ local function toggle_agent()
   end
 end
 
-vim.keymap.set({ 'n', 't' }, '<leader>cc', toggle_agent, { desc = 'Toggle Claude Code agent' })
+vim.keymap.set('n', '<leader>cc', toggle_agent, { desc = 'Toggle Claude Code agent' })
 
 -- Window numbers (Ctrl+1 … Ctrl+9, Ctrl+L) count the Claude Code panel too.
 do
