@@ -159,10 +159,9 @@ end
 -- Ctrl-l: hop between the explorer and the file you're editing, keeping both open.
 local function is_explorer(win) return vim.bo[vim.api.nvim_win_get_buf(win)].filetype:match('^snacks_') ~= nil end
 
--- Ctrl+L: open the explorer if it's closed, otherwise move to the next window to the right
--- (explorer → file → Claude Code → back to the explorer). See dreamcore/windows.lua.
+-- Ctrl+L: move to the next open window to the right, wrapping around (e.g. explorer → file →
+-- Claude Code → explorer). It doesn't open anything; <leader>e / F2 open the explorer.
 function M.hop_files()
-  if not Snacks.picker.get({ source = 'explorer' })[1] then Snacks.explorer({ cwd = vim.fn.getcwd() }); return end
   require('dreamcore.windows').next()
 end
 

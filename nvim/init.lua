@@ -162,59 +162,19 @@ vim.keymap.set('n', '<leader>o', function() Snacks.explorer.reveal() end, { desc
 vim.keymap.set('n', '<leader>qq', '<cmd>qa<CR>', { desc = "Quit all (stops if anything is unsaved)" })
 vim.keymap.set("n", "<leader>Q", function() Snacks.bufdelete() end, { desc = "Close Buffer" })
 vim.keymap.set("n", "<leader>un", function() Snacks.notifier.show_history() end, { desc = "Notification History" })
-vim.keymap.set('n', '<leader>t', '<cmd>ToggleTerm<CR>')
-vim.keymap.set('t', '<leader>t', '<cmd>ToggleTerm<CR>')
+-- <leader>t always toggles your shell (terminal 1). A plain :ToggleTerm toggles whichever terminal
+-- you're in, so pressed inside Claude Code it would try to toggle Claude instead.
+vim.keymap.set('n', '<leader>t', '<cmd>1ToggleTerm<CR>', { desc = 'Toggle terminal' })
+vim.keymap.set('t', '<leader>t', '<cmd>1ToggleTerm<CR>', { desc = 'Toggle terminal' })
 
 -- Claude Code agent panel  (off → active → minimized → active → …)
 local agent_term  = nil
 local agent_state = 'off'   -- 'off' | 'active' | 'minimized'
-local agent_win   = nil     -- indicator float window
 
-local function agent_hide_indicator()
-  if agent_win and vim.api.nvim_win_is_valid(agent_win) then
-    vim.api.nvim_win_close(agent_win, true)
-  end
-  agent_win = nil
-end
-
-local function agent_show_indicator()
-  agent_hide_indicator()
-  local buf = vim.api.nvim_create_buf(false, true)
-  -- The Claude Code crab, cell for cell as Claude Code 2.1 draws it: coral, with a black
-  -- background behind the middle cells (that's what turns the dark corners of ▛ into eyes).
-  local crab = {
-    { { ' ' }, { '▐' }, { '▛███▛█', 'AgentLogoEye' } },
-    { { '▝▜' }, { '█████', 'AgentLogoEye' }, { '█▀' } },
-    { { ' ▝▝   ▝▝' } },
-  }
-  local ns, lines, width = vim.api.nvim_create_namespace('agent_logo'), {}, 9
-  for _, row in ipairs(crab) do
-    local text = table.concat(vim.tbl_map(function(seg) return seg[1] end, row))
-    table.insert(lines, ' ' .. text .. (' '):rep(width - vim.fn.strdisplaywidth(text)) .. ' ')
-  end
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  for i, row in ipairs(crab) do
-    local byte = 1 -- after the leading space
-    for _, seg in ipairs(row) do
-      vim.api.nvim_buf_set_extmark(buf, ns, i - 1, byte, { end_col = byte + #seg[1], hl_group = seg[2] or 'AgentLogo' })
-      byte = byte + #seg[1]
-    end
-  end
-  vim.bo[buf].bufhidden = 'wipe'
-  agent_win = vim.api.nvim_open_win(buf, false, {
-    relative  = 'editor',
-    anchor    = 'NE',
-    row       = 1,
-    col       = vim.o.columns - 1,
-    width     = width + 2,
-    height    = #lines,
-    style     = 'minimal',
-    border    = 'single',
-    focusable = false,
-    zindex    = 200,
-  })
-  vim.api.nvim_set_option_value('winhl', 'NormalFloat:AgentIndicator,FloatBorder:AgentIndicatorBorder', { win = agent_win })
-end
+-- The crab badge while the panel is minimized (dances while Claude works, red "!" when it
+-- needs your approval): dreamcore/agentbadge.lua.
+local function agent_hide_indicator() require('dreamcore.agentbadge').hide() end
+local function agent_show_indicator() require('dreamcore.agentbadge').show() end
 
 -- Panel width in columns: 42% of the screen until you drag its red line (then what you set).
 local agent_cols = nil
@@ -232,7 +192,10 @@ local function toggle_agent()
   if agent_state == 'off' then
     local w = agent_width
     agent_term = require('toggleterm.terminal').Terminal:new({
-      cmd          = 'claude',
+      -- --settings adds hooks that tell the badge when Claude is working, done, or waiting
+      -- for your approval. Your own Claude Code settings are untouched.
+      count        = 99, -- its own terminal number, so it never takes your shell's (1)
+      cmd          = 'claude --settings ' .. vim.fn.shellescape(require('dreamcore.agentbadge').hook_settings()),
       dir          = vim.fn.getcwd(),
       direction    = 'float',
       float_opts   = {
@@ -254,6 +217,7 @@ local function toggle_agent()
       highlights   = { NormalFloat = { link = 'Normal' }, FloatBorder = { link = 'FloatBorder' } },
       on_exit = function()
         agent_hide_indicator()
+        require('dreamcore.agentbadge').set_state('idle')
         agent_term  = nil
         agent_state = 'off'
       end,
@@ -304,13 +268,15 @@ do
 end
 
 -- While you're in the panel, clicking elsewhere snaps focus back to it (unless you left on purpose).
+-- Only ordinary windows snap back: a terminal (<leader>t), picker or popup you open stays.
 vim.api.nvim_create_autocmd('WinEnter', {
   callback = function()
     if agent_state ~= 'active' or not agent_term then return end
     local win = agent_term.window
     if not win then return end
-    if vim.api.nvim_get_current_win() == win then agent_locked = true return end
-    if not agent_locked then return end
+    local cur = vim.api.nvim_get_current_win()
+    if cur == win then agent_locked = true return end
+    if not agent_locked or vim.api.nvim_win_get_config(cur).relative ~= '' then return end
     vim.schedule(function()
       if agent_state == 'active' and vim.api.nvim_win_is_valid(win) then
         vim.api.nvim_set_current_win(win)
