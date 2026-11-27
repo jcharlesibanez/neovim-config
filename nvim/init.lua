@@ -167,6 +167,19 @@ vim.keymap.set("n", "<leader>un", function() Snacks.notifier.show_history() end,
 -- the shell) a space is just a space. Leave with Ctrl+1–9 / Ctrl+L, then use the shortcut.
 vim.keymap.set('n', '<leader>t', '<cmd>1ToggleTerm<CR>', { desc = 'Toggle terminal' })
 
+-- :TermRestart (or :termrestart) — end the <leader>t shell and open a fresh one, for when it
+-- gets stuck. (If you just can't type into it, it's in normal mode: press i.)
+vim.api.nvim_create_user_command('TermRestart', function()
+  local term = require('toggleterm.terminal').get(1)
+  if term then term:shutdown() end
+  vim.cmd('1ToggleTerm')
+  -- Ready to type, once toggleterm has finished opening it.
+  vim.defer_fn(function()
+    if vim.bo.buftype == 'terminal' then vim.cmd.startinsert() end
+  end, 50)
+end, { desc = 'Restart the <leader>t terminal' })
+vim.cmd([[cnoreabbrev <expr> termrestart getcmdtype() == ':' && getcmdline() ==# 'termrestart' ? 'TermRestart' : 'termrestart']])
+
 -- Claude Code agent panel  (off → active → minimized → active → …)
 local agent_term  = nil
 local agent_state = 'off'   -- 'off' | 'active' | 'minimized'
