@@ -197,30 +197,44 @@ local function agent_show_indicator()
   vim.api.nvim_set_option_value('winhl', 'NormalFloat:AgentIndicator,FloatBorder:AgentIndicatorBorder', { win = agent_win })
 end
 
+-- Panel width in columns: 42% of the screen until you drag its red line (then what you set).
+local agent_cols = nil
+local function agent_width()
+  local cols = agent_cols or math.floor(vim.o.columns * 0.42)
+  return math.max(30, math.min(cols, vim.o.columns - 20))
+end
+
 local function toggle_agent()
   if agent_state == 'off' then
-    local w = function() return math.floor(vim.o.columns * 0.42) end
+    local w = agent_width
     agent_term = require('toggleterm.terminal').Terminal:new({
       cmd          = 'claude',
       dir          = vim.fn.getcwd(),
       direction    = 'float',
       float_opts   = {
-        border   = 'single',
+        -- Only a red line on the left (like the explorer's edge) and the title on top: the top
+        -- row is blank apart from " Claude Code ", with no right or bottom border.
+        -- Order: top-left, top, top-right, right, bottom-right, bottom, bottom-left, left.
+        border    = { '│', ' ', '', '', '', '', '', '│' },
+        title_pos = 'center',
         width    = w,
-        height   = function() return vim.o.lines - 3 end,
+        height   = function() return vim.o.lines - 2 end,
         row      = 0,
-        col      = function() return vim.o.columns - w() - 2 end,
+        col      = function() return vim.o.columns - w() - 1 end,
         winblend = 0,
       },
       hidden       = true,
-      display_name = 'Claude Code',
+      display_name = ' Claude Code ', -- shown centered on the top row, like " Explorer "
+      -- Red line like the explorer and every other float (toggleterm's own default is the
+      -- plain text color, which showed as a white line).
+      highlights   = { NormalFloat = { link = 'Normal' }, FloatBorder = { link = 'FloatBorder' } },
       on_exit = function()
         agent_hide_indicator()
         agent_term  = nil
         agent_state = 'off'
       end,
       on_open = function(t)
-        vim.keymap.set('t', '<leader>-', toggle_agent, { buffer = t.bufnr })
+        vim.keymap.set('t', '<leader>cc', toggle_agent, { buffer = t.bufnr })
       end,
     })
     agent_term:open()
@@ -236,7 +250,7 @@ local function toggle_agent()
   end
 end
 
-vim.keymap.set({ 'n', 't' }, '<leader>-', toggle_agent, { desc = 'Toggle Claude Code agent' })
+vim.keymap.set({ 'n', 't' }, '<leader>cc', toggle_agent, { desc = 'Toggle Claude Code agent' })
 
 -- While the agent is open, clicking or jumping elsewhere snaps focus back to it.
 vim.api.nvim_create_autocmd('WinEnter', {
@@ -252,6 +266,68 @@ vim.api.nvim_create_autocmd('WinEnter', {
     end)
   end,
 })
+-- Drag the Claude Code panel's red line with the mouse to make it wider or narrower.
+-- (It's a floating window, which Neovim can't resize by dragging on its own.)
+do
+  local dragging = false
+  local function on_agent_line()
+    if agent_state ~= 'active' or not agent_term then return false end
+    local win = agent_term.window
+    if not (win and vim.api.nvim_win_is_valid(win)) then return false end
+    local m, cfg = vim.fn.getmousepos(), vim.api.nvim_win_get_config(win)
+    local col = type(cfg.col) == 'table' and cfg.col[false] or cfg.col
+    return m.screencol - 1 == col
+  end
+  local function mouse(key, fn)
+    vim.keymap.set({ 'n', 'i', 't' }, key, function()
+      if fn() then return '' end
+      return key
+    end, { expr = true, desc = 'Drag the Claude Code panel edge to resize it' })
+  end
+  mouse('<LeftMouse>', function() dragging = on_agent_line(); return dragging end)
+  mouse('<LeftDrag>', function()
+    if not dragging then return false end
+    agent_cols = vim.o.columns - vim.fn.getmousepos().screencol
+    vim.schedule(function() -- can't change windows from inside a key mapping's expression
+      local win = agent_term and agent_term.window
+      if not (win and vim.api.nvim_win_is_valid(win)) then return end
+      vim.api.nvim_win_set_config(win, { relative = 'editor', row = 0, col = vim.o.columns - agent_width() - 1,
+                                         width = agent_width(), height = vim.o.lines - 2 })
+    end)
+    return true
+  end)
+  mouse('<LeftRelease>', function()
+    local was = dragging
+    dragging = false
+    return was
+  end)
+end
+
+-- <leader>= : resize mode for the window you're in. Keep tapping, no leader needed:
+--   h / ←  narrower    l / →  wider    k / ↑  taller    j / ↓  shorter    =  make all even
+-- Any other key (Esc, Enter, …) finishes. The explorer's edge can also be dragged with the mouse.
+vim.keymap.set('n', '<leader>=', function()
+  local toast = require('dreamcore.toast')
+  toast.show('Resize: h/l narrower/wider, j/k shorter/taller, = even, Esc done',
+    { id = 'resize', color = '#ffffff', timeout = false, order = 100 })
+  local left, right, up, down = vim.keycode('<Left>'), vim.keycode('<Right>'), vim.keycode('<Up>'), vim.keycode('<Down>')
+  while true do
+    vim.cmd.redraw()
+    local ok, k = pcall(vim.fn.getcharstr)
+    if not ok then break end
+    if k == 'h' or k == left then vim.cmd('vertical resize -3')
+    elseif k == 'l' or k == right then vim.cmd('vertical resize +3')
+    elseif k == 'k' or k == up then vim.cmd('resize +1')
+    elseif k == 'j' or k == down then vim.cmd('resize -1')
+    elseif k == '=' then vim.cmd('wincmd =')
+    else
+      if k ~= vim.keycode('<Esc>') and k ~= '\r' then vim.api.nvim_feedkeys(k, 'm', false) end
+      break
+    end
+  end
+  toast.hide('resize')
+end, { desc = 'Resize windows (h/l/j/k, = even, Esc done)' })
+
 vim.keymap.set('n', '<leader>H', function() Snacks.picker.recent() end, { desc = "Recent files" })
 vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>', { desc = "Clear Search" })
 vim.opt.shiftwidth = 4   -- Number of spaces for each step of (auto)indent
