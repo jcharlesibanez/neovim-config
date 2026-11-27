@@ -180,14 +180,18 @@ end
 local function agent_show_indicator()
   agent_hide_indicator()
   local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { ' ◉ AGENT ON ' })
+  -- The Claude logo (✻) in Claude's coral, inside the red box.
+  local text = ' ✻ '
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { text })
+  vim.api.nvim_buf_set_extmark(buf, vim.api.nvim_create_namespace('agent_logo'), 0, 1,
+    { end_col = 1 + #'✻', hl_group = 'AgentLogo' })
   vim.bo[buf].bufhidden = 'wipe'
   agent_win = vim.api.nvim_open_win(buf, false, {
     relative  = 'editor',
     anchor    = 'NE',
     row       = 1,
     col       = vim.o.columns - 1,
-    width     = 13,
+    width     = vim.fn.strdisplaywidth(text),
     height    = 1,
     style     = 'minimal',
     border    = 'single',
@@ -203,6 +207,11 @@ local function agent_width()
   local cols = agent_cols or math.floor(vim.o.columns * 0.42)
   return math.max(30, math.min(cols, vim.o.columns - 20))
 end
+
+-- While you're in the panel, stray clicks elsewhere snap focus back to it ("locked"). Leaving on
+-- purpose with Ctrl+L or Ctrl+number unlocks it until you come back.
+local agent_locked = true
+local agent_closing = false -- true while <leader>cc minimizes the panel (see agent_term.close)
 
 local function toggle_agent()
   if agent_state == 'off' then
@@ -235,29 +244,58 @@ local function toggle_agent()
       end,
       on_open = function(t)
         vim.keymap.set('t', '<leader>cc', toggle_agent, { buffer = t.bufnr })
+        -- Ctrl+L hops on to the next window, as it does everywhere else.
+        vim.keymap.set('t', '<C-l>', function() require('dreamcore.windows').next() end, { buffer = t.bufnr })
       end,
     })
+    -- toggleterm closes a floating terminal as soon as you leave it. Keep this one open while
+    -- you work in other windows; it closes only when minimized (<leader>cc) or Claude exits.
+    local close = agent_term.close
+    agent_term.close = function(self, ...)
+      local exited = not self.job_id or vim.fn.jobwait({ self.job_id }, 0)[1] ~= -1
+      if agent_closing or exited then return close(self, ...) end
+    end
     agent_term:open()
     agent_state = 'active'
+    agent_locked = true
   elseif agent_state == 'active' then
+    agent_closing = true
     agent_term:toggle()        -- closes window, keeps process
+    agent_closing = false
     agent_show_indicator()
     agent_state = 'minimized'
   else                         -- minimized
     agent_hide_indicator()
     agent_term:toggle()        -- reopens window
     agent_state = 'active'
+    agent_locked = true
+    vim.schedule(function() -- back in the composer, ready to type
+      if agent_term and agent_term.window == vim.api.nvim_get_current_win() then vim.cmd.startinsert() end
+    end)
   end
 end
 
 vim.keymap.set({ 'n', 't' }, '<leader>cc', toggle_agent, { desc = 'Toggle Claude Code agent' })
 
--- While the agent is open, clicking or jumping elsewhere snaps focus back to it.
+-- Window numbers (Ctrl+1 … Ctrl+9, Ctrl+L) count the Claude Code panel too.
+do
+  local windows = require('dreamcore.windows')
+  windows.agent_win = function()
+    local win = agent_state == 'active' and agent_term and agent_term.window
+    return win and vim.api.nvim_win_is_valid(win) and win or nil
+  end
+  windows.on_jump = function(from) if from == windows.agent_win() then agent_locked = false end end
+  windows.setup()
+end
+
+-- While you're in the panel, clicking elsewhere snaps focus back to it (unless you left on purpose).
 vim.api.nvim_create_autocmd('WinEnter', {
   callback = function()
     if agent_state ~= 'active' or not agent_term then return end
     local win = agent_term.window
-    if not win or vim.api.nvim_get_current_win() == win then return end
+    if not win then return end
+    if vim.api.nvim_get_current_win() == win then agent_locked = true return end
+    if not agent_locked then return end
     vim.schedule(function()
       if agent_state == 'active' and vim.api.nvim_win_is_valid(win) then
         vim.api.nvim_set_current_win(win)
@@ -284,8 +322,16 @@ do
       return key
     end, { expr = true, desc = 'Drag the Claude Code panel edge to resize it' })
   end
-  mouse('<LeftMouse>', function() dragging = on_agent_line(); return dragging end)
+  -- A plain click that ends up in the panel (a click inside it, or a stray click elsewhere
+  -- that snaps back to it) lands in Claude's composer, ready to type, instead of leaving you
+  -- in Neovim's normal mode at the clicked spot. Dragging still selects text to copy.
+  local moved = false
+  mouse('<LeftMouse>', function()
+    dragging, moved = on_agent_line(), false
+    return dragging
+  end)
   mouse('<LeftDrag>', function()
+    moved = true
     if not dragging then return false end
     agent_cols = vim.o.columns - vim.fn.getmousepos().screencol
     vim.schedule(function() -- can't change windows from inside a key mapping's expression
@@ -299,6 +345,22 @@ do
   mouse('<LeftRelease>', function()
     local was = dragging
     dragging = false
+    -- A stray click elsewhere already snapped back to the composer: ignore its release, which
+    -- would otherwise land outside the terminal and knock it out of typing mode.
+    local win = agent_state == 'active' and agent_term and agent_term.window
+    if not was and win and vim.api.nvim_get_current_win() == win and vim.api.nvim_get_mode().mode == 't'
+      and vim.fn.getmousepos().winid ~= win then
+      return true
+    end
+    if not was and not moved then
+      vim.schedule(function()
+        local win = agent_state == 'active' and agent_term and agent_term.window
+        if win and vim.api.nvim_get_current_win() == win and vim.api.nvim_get_mode().mode:sub(1, 1) == 'n' then
+          agent_locked = true
+          vim.cmd.startinsert()
+        end
+      end)
+    end
     return was
   end)
 end
