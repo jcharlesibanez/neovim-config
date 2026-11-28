@@ -3,7 +3,9 @@
 -- Each runs in a panel on the right (a red line on its left, its name on top) and goes
 -- off → open → minimized → open … with its key. Only one panel shows at a time: opening one
 -- minimizes the other, so the one you opened last is the one in front. Minimized agents keep
--- running and show a badge in the top right (Claude's crab on top, Codex's knot below).
+-- running and show a badge in the top right (Claude's crab on top, Codex's logo below). So does
+-- an agent you started yourself in the <leader>t shell while that shell is closed. Status hooks
+-- (dreamcore/agenthooks.lua) tell the badges what each agent is doing.
 --
 -- While you're in a panel, stray clicks elsewhere snap back to it; Ctrl+L / Ctrl+1–9 leave on
 -- purpose. Click in it to type. Drag its red line to resize it.
@@ -32,18 +34,57 @@ function M.active_win()
   return a and window(a)
 end
 
+-- Agents started yourself in the <leader>t shell (known from their hooks), by id.
+local in_shell = {}
+
+local function shell_open()
+  local t = require('toggleterm.terminal').get(1)
+  return t ~= nil and t:is_open()
+end
+
+-- Show each agent's badge while it's running out of sight: panel minimized, or running in the
+-- shell while the shell is closed.
+function M.refresh()
+  for _, a in ipairs(agents) do
+    local want = a.state == 'minimized' or (in_shell[a.id] and a.state ~= 'active' and not shell_open())
+    if want then a.badge.show() else a.badge.hide() end
+  end
+end
+
+-- Called by the agents' hooks: dream_agent_state(state, agent id, 'panel' | 'shell').
+function M.report(state, id, source)
+  local a
+  for _, x in ipairs(agents) do if x.id == id then a = x end end
+  if not a then return end
+  if source == 'shell' then
+    if state == 'ended' then in_shell[id] = nil else in_shell[id] = true end
+  end
+  if state == 'ended' then
+    -- The session closed: nothing left to show for it (unless a panel session is still going).
+    if not (source == 'shell' and a.state ~= 'off') then a.badge.set_state('idle') end
+  elseif state ~= 'session' then
+    a.badge.set_state(state)
+  end
+  M.refresh()
+end
+_G.dream_agent_state = function(state, id, source)
+  M.report(state, id or 'claude', source or 'panel')
+  return 0
+end
+
 local function minimize(a)
   a.state = 'minimized'
   a.closing = true
   a.term:toggle() -- closes the window, keeps the process
   a.closing = false
-  a.badge.show()
+  M.refresh()
 end
 
 local function start(a)
   a.term = require('toggleterm.terminal').Terminal:new({
     count        = a.count, -- its own terminal number, so it never takes your shell's (1)
-    cmd          = a.cmd(),
+    cmd          = a.bin,
+    env          = { DREAM_AGENT_SOURCE = 'panel' }, -- its hooks report from the panel, not the shell
     dir          = vim.fn.getcwd(),
     direction    = 'float',
     float_opts   = {
@@ -62,9 +103,9 @@ local function start(a)
     -- Red line like every other float (toggleterm's default is the plain text color).
     highlights   = { NormalFloat = { link = 'Normal' }, FloatBorder = { link = 'FloatBorder' } },
     on_exit = function()
-      a.badge.hide()
-      if a.exited then a.exited() end
       a.term, a.state = nil, 'off'
+      a.badge.set_state('idle')
+      M.refresh()
     end,
     on_open = function(t)
       -- Ctrl+L hops on to the next window, as it does everywhere else.
@@ -92,11 +133,11 @@ function M.toggle(a)
   if a.state == 'off' then
     start(a)
   else
-    a.badge.hide()
-    if a.opened then a.opened() end
+    a.badge.seen()
     a.term:toggle() -- reopens the window
   end
   a.state, locked = 'active', true
+  M.refresh()
   vim.schedule(function() -- in the composer, ready to type
     if window(a) and window(a) == vim.api.nvim_get_current_win() then vim.cmd.startinsert() end
   end)
@@ -192,24 +233,30 @@ local function setup_window_handling()
 end
 
 function M.setup()
-  local claude = require('dreamcore.agentbadge')
   M.define({
-    title = 'Claude Code', key = '<leader>cc', count = 99, bin = 'claude',
+    id = 'claude', title = 'Claude Code', key = '<leader>cc', count = 99, bin = 'claude',
     install = 'curl -fsSL https://claude.ai/install.sh | bash',
-    -- --settings adds hooks that tell the crab badge when Claude is working, done, or waiting
-    -- for your approval. Your own Claude Code settings are untouched.
-    cmd = function() return 'claude --settings ' .. vim.fn.shellescape(claude.hook_settings()) end,
-    badge = claude,
-    opened = claude.seen,
-    exited = function() claude.set_state('idle') end,
+    badge = require('dreamcore.agentbadge'),
   })
   M.define({
-    title = 'Codex', key = '<leader>co', count = 98, bin = 'codex',
+    id = 'codex', title = 'Codex', key = '<leader>co', count = 98, bin = 'codex',
     install = vim.fn.has('mac') == 1 and 'brew install --cask codex' or 'npm install -g @openai/codex',
-    cmd = function() return 'codex' end,
     badge = require('dreamcore.codexbadge'),
   })
   setup_window_handling()
+  require('dreamcore.agenthooks').install()
+  -- Opening or closing the <leader>t shell can show or hide a badge for an agent running in it;
+  -- opening it counts as looking at that agent's reply.
+  vim.api.nvim_create_autocmd({ 'WinNew', 'WinClosed', 'BufWinEnter' }, {
+    callback = function()
+      vim.schedule(function()
+        if shell_open() then
+          for _, a in ipairs(agents) do if in_shell[a.id] then a.badge.seen() end end
+        end
+        M.refresh()
+      end)
+    end,
+  })
 end
 
 return M

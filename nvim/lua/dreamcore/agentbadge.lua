@@ -4,7 +4,7 @@
 --   idle      → it stands still
 --   attention → it stands still with a red "!" next to it, blinking: Claude needs your approval
 --   unread    → same "!": Claude finished while the panel was minimized and you haven't looked yet
--- Claude Code reports these through hooks (see M.hook_settings), which call dream_agent_state().
+-- Claude Code reports these through hooks (dreamcore/agenthooks.lua).
 local M = {}
 
 local ns = vim.api.nvim_create_namespace('agent_badge')
@@ -107,8 +107,10 @@ local function animate()
   end
 end
 
+function M.visible() return win ~= nil and vim.api.nvim_win_is_valid(win) end
+
 function M.show()
-  M.hide()
+  if M.visible() then return end
   buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = 'wipe'
   win = vim.api.nvim_open_win(buf, false, {
@@ -132,7 +134,7 @@ function M.set_state(state)
   -- You sent a message: Claude starts working and the clock starts.
   if state == 'start' then state, turn_start = 'working', vim.uv.hrtime() end
   if state == 'done' or state == 'idle' then turn_start = nil end
-  -- Claude finished: if the panel is minimized (badge showing), that's a reply you haven't read.
+  -- Claude finished: if its badge is showing (out of sight), that's a reply you haven't read.
   if state == 'done' then state = (win and vim.api.nvim_win_is_valid(win)) and 'unread' or 'idle' end
   M.state = state
   render()
@@ -142,30 +144,6 @@ end
 -- You opened the panel: its reply is read. (An approval still waiting keeps its "!".)
 function M.seen()
   if M.state == 'unread' then M.set_state('idle') end
-end
-
--- Called by Claude Code's hooks through `nvim --server $NVIM --remote-expr`.
-_G.dream_agent_state = function(state)
-  M.set_state(state)
-  return 0
-end
-
--- Settings passed to `claude --settings` so the panel's Claude reports what it's doing.
--- Hooks inherit $NVIM (the address of this Neovim) from the terminal Claude runs in.
-function M.hook_settings()
-  local function report(state)
-    return ('[ -n "$NVIM" ] && %s --server "$NVIM" --remote-expr "v:lua.dream_agent_state(\'%s\')" >/dev/null 2>&1; true')
-      :format(vim.fn.shellescape(vim.v.progpath), state)
-  end
-  local function hook(state, matcher)
-    return { { matcher = matcher, hooks = { { type = 'command', command = report(state) } } } }
-  end
-  return vim.json.encode({ hooks = {
-    UserPromptSubmit = hook('start'),
-    PostToolUse = hook('working', '*'),            -- you approved and the tool ran: back to work
-    Notification = hook('attention', 'permission_prompt'),
-    Stop = hook('done'),
-  } })
 end
 
 return M
