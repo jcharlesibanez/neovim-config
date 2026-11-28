@@ -92,8 +92,8 @@ local function render()
   end
   local width = vim.fn.strdisplaywidth(lines[1])
   if vim.api.nvim_win_get_width(win) ~= width or vim.api.nvim_win_get_height(win) ~= #lines then
-    vim.api.nvim_win_set_config(win, { relative = 'editor', anchor = 'NE', row = 1, col = vim.o.columns - 1,
-                                       width = width, height = #lines })
+    vim.api.nvim_win_set_config(win, { width = width, height = #lines })
+    require('dreamcore.badges').layout() -- a taller crab badge pushes Codex's down
   end
 end
 
@@ -116,6 +116,7 @@ function M.show()
     style = 'minimal', border = 'single', focusable = false, zindex = 200,
   })
   vim.wo[win].winhl = 'NormalFloat:AgentIndicator,FloatBorder:AgentIndicatorBorder'
+  require('dreamcore.badges').set('claude', 0, win)
   render()
   animate()
 end
@@ -123,6 +124,7 @@ end
 function M.hide()
   if win and vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
   win, buf = nil, nil
+  require('dreamcore.badges').set('claude', 0, nil)
   animate()
 end
 
@@ -165,13 +167,5 @@ function M.hook_settings()
     Stop = hook('done'),
   } })
 end
-
-vim.api.nvim_create_autocmd('VimResized', {
-  callback = function()
-    if win and vim.api.nvim_win_is_valid(win) then
-      vim.api.nvim_win_set_config(win, { relative = 'editor', anchor = 'NE', row = 1, col = vim.o.columns - 1 })
-    end
-  end,
-})
 
 return M

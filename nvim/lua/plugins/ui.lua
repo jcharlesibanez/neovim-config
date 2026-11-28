@@ -69,6 +69,11 @@ return {
         vim.api.nvim_set_hl(0, 'AgentLogoEye',         { fg = '#d77757', bg = '#000000' }) -- crab cells with its black eyes
         vim.api.nvim_set_hl(0, 'AgentAttention',       { fg = RED, bg = BG, bold = true }) -- blinking "!" next to the crab
         vim.api.nvim_set_hl(0, 'AgentTime',            { fg = '#8b949e', bg = BG })        -- time under the crab, Claude Code's grey
+        -- Codex badge: the OpenAI knot in white, stars twinkling from dim to bright.
+        vim.api.nvim_set_hl(0, 'CodexLogo',            { fg = '#e6e6e6', bg = BG })
+        vim.api.nvim_set_hl(0, 'CodexStarDim',         { fg = '#6b7280', bg = BG })
+        vim.api.nvim_set_hl(0, 'CodexStar',            { fg = '#c9d1d9', bg = BG })
+        vim.api.nvim_set_hl(0, 'CodexStarBright',      { fg = '#ffffff', bg = BG, bold = true })
 
         -- Dim grey italic: :Music now-playing badge, LaTeX preview page bar.
         vim.api.nvim_set_hl(0, 'BadgeDim', { fg = '#8b949e', bg = BG, italic = true })
