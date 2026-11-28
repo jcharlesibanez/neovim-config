@@ -1,5 +1,6 @@
 -- The badge in the top right while Codex is running out of sight (panel minimized, or running in
--- the <leader>t shell while it's closed): the OpenAI logo, the same size as Claude Code's crab.
+-- the <leader>t shell while it's closed): the OpenAI logo — a real image in Ghostty/kitty — the
+-- same size as Claude Code's crab.
 -- It sits below the crab when both show (dreamcore/badges.lua stacks them).
 --   idle      → the logo, still
 --   working   → the logo flips around its vertical axis like a spinning coin, with the time
@@ -71,7 +72,7 @@ local FRAMES = {
     bg = { '003220', '031130', '022300' },
   },
 }
-local CANVAS, LOGO_COL = 11, 2 -- same 11×3 box as the crab; the logo is 6 wide
+local CANVAS, LOGO_COL = 11, 2 -- same 11×3 box as the crab; logo starts 2 columns in (7 wide as an image, 6 as pixels)
 local BANG = { '██', '▀▀', '▀▀' } -- the "!": bar, then the dot under a half-row gap
 
 local function chars(s) return vim.fn.split(s, [[\zs]]) end
@@ -94,23 +95,69 @@ local function elapsed()
   return s .. 's'
 end
 
+-- In Ghostty/kitty the logo is a real image: assets/codex/flip-NN.png (made from the same SVG),
+-- drawn with the kitty graphics protocol's Unicode placeholders. Each frame is uploaded to the
+-- terminal once under its own image number; the badge's text then holds a 7×3 block of
+-- placeholder characters whose text colour says which image to draw. Changing that colour
+-- switches frames — no overlays, nothing to clean up. Elsewhere it's the shaded pixels above.
+local IMAGES = vim.fn.stdpath('config') .. '/assets/codex/'
+local IMG_COLS, IMG_ROWS = 7, 3      -- the PNGs are 7:6 with the logo centred
+local IMG_BASE = 0xC0DE00            -- image numbers: IMG_BASE + frame
+local use_image, uploaded = false, false
+local PLACEHOLDER = vim.fn.nr2char(0x10EEEE)
+-- Row/column diacritics (the kitty spec's table; Snacks uses the same list).
+local DIACRITICS = { 0x0305, 0x030D, 0x030E, 0x0310, 0x0312, 0x033D, 0x033E, 0x033F }
+
+local function upload()
+  if uploaded then return end
+  uploaded = true
+  local term = require('snacks.image.terminal')
+  for i = 1, #FRAMES do
+    local id = IMG_BASE + i
+    term.request({ a = 't', t = 'f', f = 100, i = id, data = Snacks.util.base64(IMAGES .. ('flip-%02d.png'):format(i - 1)) })
+    term.request({ a = 'p', U = 1, i = id, p = 1, c = IMG_COLS, r = IMG_ROWS, C = 1 }) -- virtual placement
+  end
+end
+
+-- One row of placeholder cells: the image row r (0-based) across all its columns.
+local function placeholder_row(r)
+  local cells = {}
+  for c = 0, IMG_COLS - 1 do
+    cells[#cells + 1] = PLACEHOLDER .. vim.fn.nr2char(DIACRITICS[r + 1]) .. vim.fn.nr2char(DIACRITICS[c + 1])
+  end
+  return table.concat(cells)
+end
+
+-- The placeholders' colour is the image number of the frame to show (underline colour = placement).
+local function show_frame(i)
+  vim.api.nvim_set_hl(0, 'CodexImage', { fg = IMG_BASE + i, sp = 1, bg = 'NONE', nocombine = true })
+end
+
 local function render()
   if not (win and vim.api.nvim_win_is_valid(win)) then return end
-  local frame = M.state == 'working' and FRAMES[tick % #FRAMES + 1] or FRAMES[1]
+  local index = M.state == 'working' and tick % #FRAMES + 1 or 1
+  local frame = FRAMES[index]
   local bang = M.state == 'attention' or M.state == 'unread'
   local bang_on = bang and math.floor(tick / 5) % 2 == 0
   local lines, marks = {}, {}
   for r = 1, 3 do
-    local cs, fgs, bgs = chars(frame.chars[r]), frame.fg[r], frame.bg[r]
     local line = (' '):rep(LOGO_COL)
-    for c, ch in ipairs(cs) do
-      local fg, bg = fgs:sub(c, c), bgs:sub(c, c)
-      if ch ~= ' ' or tonumber(bg, 16) > 2 then
-        table.insert(marks, { r - 1, #line, #line + #ch, shade(fg, bg) })
+    local width = 6
+    if use_image then
+      local cells = placeholder_row(r - 1)
+      table.insert(marks, { r - 1, #line, #line + #cells, 'CodexImage' })
+      line, width = line .. cells, IMG_COLS
+    else
+      local cs, fgs, bgs = chars(frame.chars[r]), frame.fg[r], frame.bg[r]
+      for c, ch in ipairs(cs) do
+        local fg, bg = fgs:sub(c, c), bgs:sub(c, c)
+        if ch ~= ' ' or tonumber(bg, 16) > 2 then
+          table.insert(marks, { r - 1, #line, #line + #ch, shade(fg, bg) })
+        end
+        line = line .. ch
       end
-      line = line .. ch
     end
-    line = line .. (' '):rep(CANVAS - LOGO_COL - #cs)
+    line = line .. (' '):rep(CANVAS - LOGO_COL - width)
     if bang then
       local b = bang_on and BANG[r] or '  '
       table.insert(marks, { r - 1, #line + 1, #line + 1 + #b, 'AgentAttention' })
@@ -125,7 +172,9 @@ local function render()
     table.insert(lines, (' '):rep(left) .. text .. (' '):rep(width - left - #text))
     table.insert(marks, { #lines - 1, left, left + #text, 'AgentTime' })
   end
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  if not vim.deep_equal(vim.api.nvim_buf_get_lines(buf, 0, -1, false), lines) then
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  end
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   for _, mk in ipairs(marks) do
     vim.api.nvim_buf_set_extmark(buf, ns, mk[1], mk[2], { end_col = mk[3], hl_group = mk[4] })
@@ -135,6 +184,7 @@ local function render()
     vim.api.nvim_win_set_config(win, { width = width, height = #lines })
     require('dreamcore.badges').layout()
   end
+  if use_image then show_frame(index) end
 end
 
 -- Animate only while there's something moving: the flip (working) or the blinking "!".
@@ -160,6 +210,20 @@ function M.show()
   })
   vim.wo[win].winhl = 'NormalFloat:AgentIndicator,FloatBorder:AgentIndicatorBorder'
   require('dreamcore.badges').set('codex', 10, win)
+  if not use_image and require('dreamcore.latex').inline_supported() then
+    -- check the terminal can draw placeholders (and isn't over ssh), then switch to the image
+    local term = require('snacks.image.terminal')
+    term.detect(function()
+      vim.schedule(function()
+        local env = term.env()
+        if env.placeholders and not env.remote then
+          use_image = true
+          upload()
+          render()
+        end
+      end)
+    end)
+  end
   render()
   animate()
 end
